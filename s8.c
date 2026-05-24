@@ -24,3 +24,24 @@ static struct s8 s8cat(struct arena *a, struct s8 head, struct s8 tail)
     head.len += s8cpy(a, tail).len;
     return head;
 }
+
+static size xstrlen(const u8 *s)
+{
+    size len = 0;
+    while (*s++) len++;
+    return len;
+}
+
+static bool xisalnum(u8 c)
+{
+    return (c >= '0' && c <= '9')
+        || (c >= 'a' && c <= 'z')
+        || (c >= 'A' && c <= 'Z');
+}
+
+static bool xisspace(u8 c)
+{
+    return c == '\f' || c == '\n'
+        || c == '\r' || c == '\t'
+        || c == '\v' || c == ' ';
+}

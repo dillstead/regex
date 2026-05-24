@@ -36,6 +36,25 @@ static void append(struct buf *b, u8 *src, size len)
     }
 }
 
+static void append_int(struct buf *buf, i64 x)
+{
+    u8 tmp[24];
+    u8 *end = tmp + sizeof(tmp);
+    u8 *beg = end;
+    i64 t = x > 0 ? -x : x;
+    do
+    {
+        *--beg = (u8) ('0' - t % 10);
+    } while (t /= 10);
+    if (x < 0)
+    {
+        *--beg = '-';
+    }
+    append(buf, beg, (end - beg));
+}
+
+#define append_i64(b, i)  append_int(b, (i64) i)
+#define append_size(b, i) append_i64(b, i) 
 #define append_str(b, s)  append(b, (u8 *) s, strlen(s))
 #define append_cstr(b, s) append(b, (u8 *) s, lengthof(s))
 #define append_s8(b, s)   append(b, s.data, s.len)
