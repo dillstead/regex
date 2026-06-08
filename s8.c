@@ -25,6 +25,12 @@ static struct s8 s8cat(struct arena *a, struct s8 head, struct s8 tail)
     return head;
 }
 
+static bool s8cmp(struct s8 s1, struct s8 s2)
+{
+    return s1.len == s2.len
+        && (!s1.len || !xcmp(s1.data, s2.data, (usize) s1.len));
+}
+
 static size xstrlen(const u8 *s)
 {
     size len = 0;

@@ -25,6 +25,7 @@ struct s8;
 #define s8nul         (struct s8){(u8 *)"", 1}
 #define xset(d, c, n) __builtin_memset(d, c, n)
 #define xcpy(d, s, n) __builtin_memcpy(d, s, n)
+#define xcmp(d, s, n) __builtin_memcmp(d, s, n)
 
 static usize to_usize(size v)
 {
@@ -91,14 +92,24 @@ static bool check_syntax(struct s8 re)
     return true;
 }
 
-static void add_concat(struct arena *a, struct s8 re)
+static struct s8 add_concat(struct arena *a, struct s8 re)
 {
-    struct s8 cre;
-    cre.len = re.len * 2;
-    cre.data = new(a, u8, cre.len);
-
-    for (size i = 0; i < re.len; i++) {
+    struct s8 cre = { 0 };
+    cre.data = new(a, u8, re.len * 2);
+    
+    for (size i = 0; i < re.len - 1; i++) {
+        u8 l = re.data[i];
+        u8 r = re.data[i + 1];
+        cre.data[cre.len++] = l;
+        if ((ischar(l) || l == '*' || l == ')')
+             && (ischar(r) || r == '(')) {
+            cre.data[cre.len++] = '.';
+        }
     }
+    if (re.len) {
+        cre.data[cre.len++] = re.data[re.len - 1];
+    }
+    return cre;
 }
 
 static bool test_allowed_chars(void)
@@ -192,10 +203,58 @@ static bool test_check_syntax(void)
     return passed;
 }
 
+static bool test_add_concat(struct arena *a)
+{
+    struct test_case {
+        struct s8 in;
+        struct s8 expected;
+    };
+    struct test_case tcs[] = {
+        { s8(""),    s8("")      },
+        { s8("a"),   s8("a")     },
+        { s8("|"),   s8("|")     },
+        { s8("*"),   s8("*")     },
+        { s8("("),   s8("(")     },
+        { s8(")"),   s8(")")     },
+        { s8("aa"),  s8("a.a")   },
+        { s8("aaa"), s8("a.a.a") },
+        { s8("a|"),  s8("a|")    },
+        { s8("a*"),  s8("a*")    },
+        { s8("a("),  s8("a.(")   },
+        { s8("a)"),  s8("a)")    },
+        { s8("|a"),  s8("|a")    },
+        { s8("|("),  s8("|(")    },
+        { s8("*a"),  s8("*.a")   },
+        { s8("*|"),  s8("*|")    },
+        { s8("*("),  s8("*.(")   },
+        { s8("*)"),  s8("*)")    },
+        { s8("(a"),  s8("(a")    },
+        { s8("(("),  s8("((")    },
+        { s8(")a"),  s8(").a")   },
+        { s8(")|"),  s8(")|")    },
+        { s8(")*"),  s8(")*")    },
+        { s8(")("),  s8(").(")   },
+        { s8("))"),  s8("))")    },
+    };
+    bool passed = true;
+    
+    for (size i = 0; i <= lengthof(tcs); i++) {
+        bool res = s8cmp(add_concat(a, tcs[i].in), tcs[i].expected);
+        passed = passed && res;
+        if (!res) {
+            append_cstr(&out, "add concat test ");
+            append_size(&out, i);
+            append_cstr(&out, " failed\n");
+        }
+    }
+    return passed;    
+}
+
 static i32 test_re_(struct arena *a)
 {
     bool passed = test_allowed_chars();
     passed = passed && test_check_syntax();
+    passed = passed && test_add_concat(a);
     if (passed) {
         append_cstr(&out, "all tests passed\n");
     }
@@ -214,7 +273,7 @@ static i32 re_(i32 argc, u8 **argv, struct arena *a)
         append_cstr(&err, "error: syntax\n");
         return 1;
     }
-    add_concat(a, re);
+    re = add_concat(a, re);
     return 0;
 }
 
@@ -258,8 +317,7 @@ int main(int argc, char **argv)
     size cap = (size) 1 << 24;
     u8 *mem = mmap(0, to_usize(cap), PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 
-    i32 rc = re(argc, (u8 **) argv, mem, cap);
-    _exit(EXIT_SUCCESS);
+    _exit(re(argc, (u8 **) argv, mem, cap));
 }
 
 #else
