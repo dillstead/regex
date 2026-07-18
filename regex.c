@@ -1,4 +1,4 @@
-// gcc -Werror -Wall -Wextra -Wno-error=unused-parameter -Wno-error=unused-function -Wno-error=unused-variable -Wconversion -Wno-error=sign-conversion -fsanitize=undefined -fno-diagnostics-color -O0 -g3 -o regex regex.c
+// gcc -Werror -Wall -Wextra -Wno-error=unused-parameter -Wno-error=unused-function -Wno-error=unused-variable -Wconversion -Wno-error=sign-conversion -fsanitize=undefined -fno-diagnostics-color -DTEST -O0 -g3 -o regex regex.c && echo "no error"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -33,6 +33,18 @@ static usize to_usize(size v)
     return (usize) v;
 }
 
+static u8 to_u8(i32 v)
+{
+    assert(v >= 0 && v < 256);
+    return (u8) v;
+}
+
+enum {
+    OPEN_RDONLY = 0x0,
+    OPEN_WRONLY = 0x1,
+    OPEN_RDWR   = 0x2,
+};
+
 enum {
     PLT_READ  = 0x1,
     PLT_WRITE = 0x2,
@@ -47,6 +59,7 @@ enum {
 
 #define PLT_MAP_FAILED ((void *) -1)
 
+static i32 plt_open(struct s8 path, i32);
 static u8 *plt_mmap(size, i32, i32);
 static b32 plt_write(i32, u8 *, size);
 static void plt_exit(i32 rc);
@@ -54,6 +67,7 @@ static void plt_exit(i32 rc);
 #include "arena.c"
 #include "buf.c"
 #include "s8.c"
+#include "stack.c"
 
 static struct buf out = { (u8[1 << 8]) { 0 }, 1 << 8, 0, 1, 0 };
 static struct buf err = { (u8[1 << 8]) { 0 }, 1 << 8, 0, 2, 0 };
@@ -69,7 +83,7 @@ static bool check_syntax(struct s8 re)
         && !ischar(re.data[0])) {
         return false;
     }
-    
+
     for (size i = 0; i < re.len - 1; i++) {
         if (re.data[i] == '|') {
             if (re.data[i + 1] == '|'
@@ -96,7 +110,7 @@ static struct s8 add_concat(struct arena *a, struct s8 re)
 {
     struct s8 cre = { 0 };
     cre.data = new(a, u8, re.len * 2);
-    
+
     for (size i = 0; i < re.len - 1; i++) {
         u8 l = re.data[i];
         u8 r = re.data[i + 1];
@@ -112,153 +126,63 @@ static struct s8 add_concat(struct arena *a, struct s8 re)
     return cre;
 }
 
-static bool test_allowed_chars(void)
+static bool to_postfix(struct arena *a, struct s8 re, struct s8 *pre)
 {
-    bool allowed_chars[256] =
-    {
-        ['0'] = true, ['1'] = true, ['2'] = true, ['3'] = true,
-        ['4'] = true, ['5'] = true, ['6'] = true, ['7'] = true,
-        ['8'] = true, ['9'] = true,
-        ['a'] = true, ['b'] = true, ['c'] = true, ['d'] = true,
-        ['e'] = true, ['f'] = true, ['g'] = true, ['h'] = true,
-        ['i'] = true, ['j'] = true, ['k'] = true, ['l'] = true,
-        ['m'] = true, ['n'] = true, ['o'] = true, ['p'] = true,
-        ['q'] = true, ['r'] = true, ['s'] = true, ['t'] = true,
-        ['u'] = true, ['v'] = true, ['w'] = true, ['x'] = true,
-        ['y'] = true, ['z'] = true,
-        ['A'] = true, ['B'] = true, ['C'] = true, ['D'] = true,
-        ['E'] = true, ['F'] = true, ['G'] = true, ['H'] = true,
-        ['I'] = true, ['J'] = true, ['K'] = true, ['L'] = true,
-        ['M'] = true, ['N'] = true, ['O'] = true, ['P'] = true,
-        ['Q'] = true, ['R'] = true, ['S'] = true, ['T'] = true,
-        ['U'] = true, ['V'] = true, ['W'] = true, ['X'] = true,
-        ['Y'] = true, ['Z'] = true,
-        ['\f'] = true, ['\n'] = true, ['\r'] = true, ['\t'] = true,
-        ['\v'] = true, [' '] = true
-    };
-    bool passed = true;
-    
-    for (size i = 0; i < countof(allowed_chars); i++) {
-        bool res = ischar((u8) i) == allowed_chars[i];
-        passed = passed && res;
-        if (!res) {
-            append_cstr(&out, "allowed char test ");
-            append_size(&out, i);
-            append_cstr(&out, " failed\n");
-        }
-    }
-    return passed;
-}
-    
-static bool test_check_syntax(void)
-{
-    struct test_case {
-        struct s8 in;
-        bool expected;
-    };
-    struct test_case tcs[] = {
-        { s8(""), true },
-        { s8("a"), true },
-        { s8("|"), false },
-        { s8("*"), false },
-        { s8("("), false},
-        { s8(")"), false },
-        { s8("aa"), true },
-        { s8("a|"), true },
-        { s8("a*"), true },
-        { s8("a("), true },
-        { s8("a)"), true },
-        { s8("|a"), true },
-        { s8("||"), false },
-        { s8("|*"), false },
-        { s8("|("), true },
-        { s8("|)"), false },
-        { s8("*a"), true },
-        { s8("*|"), true },
-        { s8("**"), false },
-        { s8("*("), true },
-        { s8("*)"), true },
-        { s8("(a"), true },
-        { s8("(|"), false },
-        { s8("(*"), false },
-        { s8("(("), true },
-        { s8("()"), false },
-        { s8(")a"), true },
-        { s8(")|"), true },
-        { s8(")*"), true },
-        { s8(")("), true },
-        { s8("))"), true },
-    };
-    bool passed = true;
-    
-    for (size i = 0; i <= lengthof(tcs); i++) {
-        bool res = check_syntax(tcs[i].in) == tcs[i].expected;
-        passed = passed && res;
-        if (!res) {
-            append_cstr(&out, "check syntax test ");
-            append_size(&out, i);
-            append_cstr(&out, " failed\n");
-        }
-    }
-    return passed;
-}
+    u32 prec[256];
+    xset(prec, 5, sizeof prec);
+    prec['('] = 1;
+    prec['|'] = 2;
+    prec['.'] = 3;
+    prec['*'] = 4;
 
-static bool test_add_concat(struct arena *a)
-{
-    struct test_case {
-        struct s8 in;
-        struct s8 expected;
-    };
-    struct test_case tcs[] = {
-        { s8(""),    s8("")      },
-        { s8("a"),   s8("a")     },
-        { s8("|"),   s8("|")     },
-        { s8("*"),   s8("*")     },
-        { s8("("),   s8("(")     },
-        { s8(")"),   s8(")")     },
-        { s8("aa"),  s8("a.a")   },
-        { s8("aaa"), s8("a.a.a") },
-        { s8("a|"),  s8("a|")    },
-        { s8("a*"),  s8("a*")    },
-        { s8("a("),  s8("a.(")   },
-        { s8("a)"),  s8("a)")    },
-        { s8("|a"),  s8("|a")    },
-        { s8("|("),  s8("|(")    },
-        { s8("*a"),  s8("*.a")   },
-        { s8("*|"),  s8("*|")    },
-        { s8("*("),  s8("*.(")   },
-        { s8("*)"),  s8("*)")    },
-        { s8("(a"),  s8("(a")    },
-        { s8("(("),  s8("((")    },
-        { s8(")a"),  s8(").a")   },
-        { s8(")|"),  s8(")|")    },
-        { s8(")*"),  s8(")*")    },
-        { s8(")("),  s8(").(")   },
-        { s8("))"),  s8("))")    },
-    };
-    bool passed = true;
-    
-    for (size i = 0; i <= lengthof(tcs); i++) {
-        bool res = s8cmp(add_concat(a, tcs[i].in), tcs[i].expected);
-        passed = passed && res;
-        if (!res) {
-            append_cstr(&out, "add concat test ");
-            append_size(&out, i);
-            append_cstr(&out, " failed\n");
+    xset(pre, 0, sizeof *pre);
+    pre->data = new(a, u8, re.len);
+
+    struct stack stk;
+    stack_init(a, re.len, &stk);
+
+    for (size i = 0; i < re.len; i++) {
+        switch (re.data[i]) {
+        case '(': {
+            stack_push(&stk, re.data[i]);
+            break;
+        }
+        case ')': {
+            bool found = false;
+            while (!stack_is_empty(&stk)) {
+                i32 val = stack_pop(&stk);
+                if (val == '(') {
+                    found = true;
+                    break;
+                }
+                pre->data[pre->len++] = to_u8(val);
+            }
+            if (!found) {
+                append_cstr(&err, "error: mismatched parenthesis\n");
+                return false;
+            }
+            break;
+        }
+        default: {
+            while (!stack_is_empty(&stk)
+                   && (prec[stack_peek(&stk)] >= prec[re.data[i]])) {
+                pre->data[pre->len++] = to_u8(stack_pop(&stk));
+            }
+            stack_push(&stk, re.data[i]);
+            break;
+        }
         }
     }
-    return passed;    
-}
 
-static i32 test_re_(struct arena *a)
-{
-    bool passed = test_allowed_chars();
-    passed = passed && test_check_syntax();
-    passed = passed && test_add_concat(a);
-    if (passed) {
-        append_cstr(&out, "all tests passed\n");
+    while (!stack_is_empty(&stk)) {
+        i32 val = stack_pop(&stk);
+        if (val == '(') {
+            append_cstr(&err, "error: mismatched parenthesis\n");
+            return false;
+        }
+        pre->data[pre->len++] = to_u8(val);
     }
-    return passed ? 0 : 1;
+    return true;
 }
 
 static i32 re_(i32 argc, u8 **argv, struct arena *a)
@@ -274,20 +198,38 @@ static i32 re_(i32 argc, u8 **argv, struct arena *a)
         return 1;
     }
     re = add_concat(a, re);
+    struct s8 pre;
+    if (!to_postfix(a, re, &pre)) {
+        return 1;
+    }
     return 0;
+}
+
+#include "test.c"
+
+static i32 test_re_(struct arena *a)
+{
+    bool passed = test_allowed_chars();
+    passed = passed && test_check_syntax();
+    passed = passed && test_add_concat(a);
+    passed = passed && test_to_postfix(a);
+    if (passed) {
+        append_cstr(&out, "all tests passed\n");
+    }
+    return passed ? 0 : 1;
 }
 
 static i32 re(i32 argc, u8 **argv, u8 *mem, size cap)
 {
     struct arena a = { mem, mem + cap, cap };
-#ifndef TEST    
+#ifndef TEST
     i32 rc = re_(argc, argv, &a);
 #else
     i32 rc = test_re_(&a);
-#endif    
+#endif
     flush(&out);
     flush(&err);
-    
+
     return rc;
 }
 
@@ -296,6 +238,11 @@ static i32 re(i32 argc, u8 **argv, u8 *mem, size cap)
 
 #include <sys/mman.h>
 #include <unistd.h>
+
+static i32 plt_open(struct arena *a, struct s8 path,, i32 flgs)
+{
+    struct arena scratch = *a;
+}
 
 static u8 *plt_mmap(size sz, i32 prot, i32 flgs)
 {
