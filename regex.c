@@ -59,9 +59,9 @@ enum {
 
 #define PLT_MAP_FAILED ((void *) -1)
 
-static i32 plt_open(struct s8 path, i32);
 static u8 *plt_mmap(size, i32, i32);
-static b32 plt_write(i32, u8 *, size);
+static size plt_write(i32, u8 *, size);
+static size plt_read(i32, u8 *, size);
 static void plt_exit(i32 rc);
 
 #include "arena.c"
@@ -69,8 +69,9 @@ static void plt_exit(i32 rc);
 #include "s8.c"
 #include "stack.c"
 
-static struct buf out = { (u8[1 << 8]) { 0 }, 1 << 8, 0, 1, 0 };
-static struct buf err = { (u8[1 << 8]) { 0 }, 1 << 8, 0, 2, 0 };
+static struct buf in = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 0, 0, 0 };
+static struct buf out = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 1, 0, 0 };
+static struct buf err = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 2, 0, 0 };
 
 static bool ischar(u8 c)
 {
@@ -187,8 +188,8 @@ static bool to_postfix(struct arena *a, struct s8 re, struct s8 *pre)
 
 static i32 re_(i32 argc, u8 **argv, struct arena *a)
 {
-    if (argc < 3) {
-        append_cstr(&err, "usage: regex <regex> <string> <string> ...\n");
+    if (argc != 2) {
+        append_cstr(&err, "usage: regex <regex> < stdin\n");
         return 1;
     }
 
@@ -201,6 +202,13 @@ static i32 re_(i32 argc, u8 **argv, struct arena *a)
     struct s8 pre;
     if (!to_postfix(a, re, &pre)) {
         return 1;
+    }
+
+    size cap = 1 << 8;
+    size cnt;
+    u8 *line = new(a, u8, cap);
+    while ((cnt = get_line(a, &in, &line, &cap)) > 0) {
+        append(&out, line, cnt);
     }
     return 0;
 }
@@ -229,7 +237,6 @@ static i32 re(i32 argc, u8 **argv, u8 *mem, size cap)
 #endif
     flush(&out);
     flush(&err);
-
     return rc;
 }
 
@@ -239,24 +246,24 @@ static i32 re(i32 argc, u8 **argv, u8 *mem, size cap)
 #include <sys/mman.h>
 #include <unistd.h>
 
-static i32 plt_open(struct arena *a, struct s8 path,, i32 flgs)
-{
-    struct arena scratch = *a;
-}
-
 static u8 *plt_mmap(size sz, i32 prot, i32 flgs)
 {
     return (u8 *) mmap(0, to_usize(sz), prot, flgs, -1, 0);
 }
 
-static b32 plt_write(i32 fd, u8 *buf, size len)
+static size plt_write(i32 fd, u8 *buf, size len)
 {
-    return len == write(fd, buf, to_usize(len));
+    return write(fd, buf, to_usize(len));
+}
+
+static size plt_read(i32 fd, u8 *buf, size len)
+{
+    return read(fd, buf, to_usize(len));
 }
 
 static void plt_exit(i32 rc)
 {
-    _exit(rc);
+    exit(rc);
 }
 
 int main(int argc, char **argv)
@@ -264,7 +271,7 @@ int main(int argc, char **argv)
     size cap = (size) 1 << 24;
     u8 *mem = mmap(0, to_usize(cap), PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
 
-    _exit(re(argc, (u8 **) argv, mem, cap));
+    return re(argc, (u8 **) argv, mem, cap);
 }
 
 #else
