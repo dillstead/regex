@@ -21,6 +21,13 @@ INIT:
         mov     r1, #1
         b       XCHG
 
+ADRNLIST:
+        ldr     r8, MAXCCNT
+        lsl     r8, r8, #4
+        adr     r9, CLIST
+        add     r6, r9, r8
+        mov     pc, lr
+
 GETCHA:
 	ldrb	r1, [r0]
 	add 	r0, r0, #1
@@ -29,7 +36,8 @@ GETCHA:
 XCHG:
         ldr     r4, NCNT
         mov     r5, r4
-        adr     r6, NLIST
+        bl      ADRNLIST
+        @ r6 NLIST
         adr     r7, CLIST
         b       1f
 2:
@@ -59,6 +67,7 @@ XCHG:
         @ get next character from input
         bl      GETCHA
         mov     r2, pc
+        @ compile time patch
         b       CODE0
         b       CLIST
         
@@ -90,39 +99,37 @@ CNODE:
         mov     pc, lr
         
 NNODE:
-        @ skip over CLIST
-        ldr     r8, MAXCCNT
-        lsl     r8, r8, #4
-        adr     r9, CLIST
-        add     r4, r9, r8
-        @ r4 start of NLIST
+        mov     r7, lr
+        ldr     r4, NCNT
         mov     r5, #0
-        ldr     r6, NCNT
+        bl      ADRNLIST
+        @ r4 NCNT
         @ r5 cnt
-        @ r6 NCNT
+        @ r6 NLIST
+        @ r7 saved lr
         b       1f
 2:
-        ldr     r8, [r4, #12]
-        cmp     r8, lr
+        ldr     r8, [r6, #12]
+        cmp     r8, r7
         @ if value already exists, return
         beq     3f
-        add     r4, r4, #16
+        add     r6, r6, #16
         add     r5, r5, #1
 1:
-        cmp     r5, r6
+        cmp     r5, r4
         blt     2b
         @ store
-        str     lr, [r4, #12]
+        str     r7, [r6, #12]
         @ inc NCNT
-        add     r6, r6, #1
-        str     r6, NCNT
+        add     r4, r4, #1
+        str     r4, NCNT
 3:
         @ return next inst CLIST
         mov     pc, r2
 
 	@ compile time patch
 MAXCCNT:
-        .word   0x0000000
+        .word   0x00000000
 
 CCNT:
         .word   0x00000000
