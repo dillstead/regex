@@ -44,10 +44,3 @@ static bool xisalnum(u8 c)
         || (c >= 'a' && c <= 'z')
         || (c >= 'A' && c <= 'Z');
 }
-
-static bool xisspace(u8 c)
-{
-    return c == '\f' || c == '\n'
-        || c == '\r' || c == '\t'
-        || c == '\v' || c == ' ';
-}
