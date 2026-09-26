@@ -2,10 +2,16 @@ struct arena {
     u8 *beg;
     u8 *end;
     size sz;
+    // Called before out-of-memory.
+    void (*cb)(void *usr);
+    void *usr;
 };
 
-static void oom(void)
+static _Noreturn void oom(struct arena *a)
 {
+    if (a->cb) {
+        a->cb(a->usr);
+    }
     plt_exit(1);
 }
     
@@ -15,7 +21,7 @@ static void *alloc(struct arena *a, size sz, size align, size count)
     size pad = -(iptr) a->beg & (align - 1);
     size avail = a->end - a->beg - pad;
     if (avail < 0 || count > avail / sz) {
-        oom();
+        oom(a);
     }
     
     u8 *p = a->beg + pad;

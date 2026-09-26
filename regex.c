@@ -13,8 +13,7 @@ typedef char       byte;
 typedef ptrdiff_t  size;
 typedef size_t     usize;
 typedef intptr_t   iptr;
-
-struct s8;
+typedef uintptr_t  uptr;
 
 #define assert(c)     while (!(c)) *(volatile int *)0 = 0
 #define sizeof(x)     (size) sizeof(x)
@@ -33,7 +32,7 @@ static usize to_usize(size v)
     return (usize) v;
 }
 
-static u8 to_u8(i32 v)
+static u8 to_u8(i64 v)
 {
     assert(v >= 0 && v < 256);
     return (u8) v;
@@ -59,33 +58,54 @@ enum {
 
 #define PLT_MAP_FAILED ((void *) -1)
 
-static u8 *plt_mmap(size, i32, i32);
+static void *plt_mmap(size, i32, i32);
 static size plt_write(i32, u8 *, size);
 static size plt_read(i32, u8 *, size);
-static void plt_exit(i32 rc);
+static _Noreturn void plt_exit(i32 rc);
 
 #include "arena.c"
 #include "buf.c"
 #include "s8.c"
 #include "stack.c"
 
+static b32 (*arch_compile(struct arena a, struct s8 re))(const u8 *);
+
 static struct buf in = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 0, 0, 0 };
 static struct buf out = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 1, 0, 0 };
 static struct buf err = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 2, 0, 0 };
 
-static bool ischar(u8 c)
+static bool is_literal(u8 c)
 {
-    return xisalnum(c) || xisspace(c);
+    return xisalnum(c) || c == ' ';
+}
+static bool is_valid_char(u8 c)
+{
+    return is_literal(c) || c == '|' || c == '*' || c == '(' || c == ')';
 }
 
 static bool check_syntax(struct s8 re)
 {
-    if (re.len == 1
-        && !ischar(re.data[0])) {
+    if (re.len == 0) {
+        return true;
+    }
+
+    if (!is_valid_char(re.data[0])
+        || re.data[0] == ')'
+        || re.data[0] == '*'
+        || re.data[0] == '|') {
+        return false;
+    }
+
+    if (!is_valid_char(re.data[re.len - 1])
+        || re.data[re.len - 1] == '('
+        || re.data[re.len - 1] == '|') {
         return false;
     }
 
     for (size i = 0; i < re.len - 1; i++) {
+        if (!is_valid_char(re.data[i])) {
+            return false;
+        }
         if (re.data[i] == '|') {
             if (re.data[i + 1] == '|'
                 || re.data[i + 1] == '*'
@@ -116,8 +136,8 @@ static struct s8 add_concat(struct arena *a, struct s8 re)
         u8 l = re.data[i];
         u8 r = re.data[i + 1];
         cre.data[cre.len++] = l;
-        if ((ischar(l) || l == '*' || l == ')')
-             && (ischar(r) || r == '(')) {
+        if ((is_literal(l) || l == '*' || l == ')')
+             && (is_literal(r) || r == '(')) {
             cre.data[cre.len++] = '.';
         }
     }
@@ -130,15 +150,16 @@ static struct s8 add_concat(struct arena *a, struct s8 re)
 static bool to_postfix(struct arena *a, struct s8 re, struct s8 *pre)
 {
     u32 prec[256];
-    xset(prec, 5, sizeof prec);
+    xset(prec, 5, sizeof(prec));
     prec['('] = 1;
     prec['|'] = 2;
     prec['.'] = 3;
     prec['*'] = 4;
 
-    xset(pre, 0, sizeof *pre);
+    xset(pre, 0, sizeof(*pre));
     pre->data = new(a, u8, re.len);
 
+    struct arena tmp = *a;
     struct stack stk;
     stack_init(a, re.len, &stk);
 
@@ -151,7 +172,7 @@ static bool to_postfix(struct arena *a, struct s8 re, struct s8 *pre)
         case ')': {
             bool found = false;
             while (!stack_is_empty(&stk)) {
-                i32 val = stack_pop(&stk);
+                i64 val = stack_pop(&stk);
                 if (val == '(') {
                     found = true;
                     break;
@@ -159,14 +180,13 @@ static bool to_postfix(struct arena *a, struct s8 re, struct s8 *pre)
                 pre->data[pre->len++] = to_u8(val);
             }
             if (!found) {
-                append_cstr(&err, "error: mismatched parenthesis\n");
                 return false;
             }
             break;
         }
         default: {
             while (!stack_is_empty(&stk)
-                   && (prec[stack_peek(&stk)] >= prec[re.data[i]])) {
+                   && (prec[stack_peek(&stk, 0)] >= prec[re.data[i]])) {
                 pre->data[pre->len++] = to_u8(stack_pop(&stk));
             }
             stack_push(&stk, re.data[i]);
@@ -176,16 +196,55 @@ static bool to_postfix(struct arena *a, struct s8 re, struct s8 *pre)
     }
 
     while (!stack_is_empty(&stk)) {
-        i32 val = stack_pop(&stk);
+        i64 val = stack_pop(&stk);
         if (val == '(') {
-            append_cstr(&err, "error: mismatched parenthesis\n");
             return false;
         }
         pre->data[pre->len++] = to_u8(val);
     }
+
+    *a = tmp;
     return true;
 }
 
+// Rejects a closure whose operand can match the empty string (e.g. a**).
+// The code compiled for a** will go into a loop and never return.
+static bool check_closures(struct arena scratch, struct s8 pre)
+{
+    struct stack stk;
+    stack_init(&scratch, pre.len, &stk);
+
+    for (size i = 0; i < pre.len; i++) {
+        switch (pre.data[i]) {
+        case '.': {
+            i64 r = stack_pop(&stk);
+            i64 l = stack_pop(&stk);
+            stack_push(&stk, l && r);
+            break;
+        }
+        case '|': {
+            i64 r = stack_pop(&stk);
+            i64 l = stack_pop(&stk);
+            stack_push(&stk, l || r);
+            break;
+        }
+        case '*': {
+            if (stack_pop(&stk)) {
+                return false;
+            }
+            stack_push(&stk, true);
+            break;
+        }
+        default: {
+            stack_push(&stk, false);
+            break;
+        }
+        }
+    }
+    return true;
+}
+
+// todo: use scrach arenas
 static i32 re_(i32 argc, u8 **argv, struct arena *a)
 {
     if (argc != 2) {
@@ -198,9 +257,22 @@ static i32 re_(i32 argc, u8 **argv, struct arena *a)
         append_cstr(&err, "error: syntax\n");
         return 1;
     }
+
     re = add_concat(a, re);
     struct s8 pre;
     if (!to_postfix(a, re, &pre)) {
+        append_cstr(&err, "error: mismatched parenthesis\n");
+        return 1;
+    }
+
+    if (!check_closures(*a, pre)) {
+        append_cstr(&err, "error: closure of an expression that can match the empty string\n");
+        return 1;
+    }
+
+    b32 (*match)(const u8 *) = arch_compile(*a, pre);
+    if (!match) {
+        append_cstr(&err, "error: compile\n");
         return 1;
     }
 
@@ -208,9 +280,14 @@ static i32 re_(i32 argc, u8 **argv, struct arena *a)
     size cnt;
     u8 *line = new(a, u8, cap);
     while ((cnt = get_line(a, &in, &line, &cap)) > 0) {
-        append(&out, line, cnt);
+        struct arena tmp = *a;
+        struct s8 cline = s8cat(a, (struct s8) {line, cnt}, s8nul);
+        if (match(cline.data)) {
+            append(&out, line, cnt);
+        }
+        *a = tmp;
     }
-    return 0;
+    return cnt < 0;
 }
 
 #include "test.c"
@@ -219,17 +296,26 @@ static i32 test_re_(struct arena *a)
 {
     bool passed = test_allowed_chars();
     passed = passed && test_check_syntax();
-    passed = passed && test_add_concat(a);
-    passed = passed && test_to_postfix(a);
+    passed = passed && test_add_concat(*a);
+    passed = passed && test_to_postfix(*a);
+    passed = passed && test_check_closures(*a);
     if (passed) {
         append_cstr(&out, "all tests passed\n");
     }
     return passed ? 0 : 1;
 }
 
+static void oom_cb(void *usr)
+{
+    (void) usr;
+    append_cstr(&err, "error: out of memory\n");
+    flush(&out);
+    flush(&err);
+}
+
 static i32 re(i32 argc, u8 **argv, u8 *mem, size cap)
 {
-    struct arena a = { mem, mem + cap, cap };
+    struct arena a = { mem, mem + cap, cap, oom_cb, NULL };
 #ifndef TEST
     i32 rc = re_(argc, argv, &a);
 #else
@@ -240,15 +326,21 @@ static i32 re(i32 argc, u8 **argv, u8 *mem, size cap)
     return rc;
 }
 
+#if defined(__arm__)
+#include "arm.c"
+#else
+#error "Unsupported architecture"
+#endif
+
 #if defined(__linux__)
 #include <stdlib.h>
 
 #include <sys/mman.h>
 #include <unistd.h>
 
-static u8 *plt_mmap(size sz, i32 prot, i32 flgs)
+static void *plt_mmap(size sz, i32 prot, i32 flgs)
 {
-    return (u8 *) mmap(0, to_usize(sz), prot, flgs, -1, 0);
+    return mmap(0, to_usize(sz), prot, flgs, -1, 0);
 }
 
 static size plt_write(i32 fd, u8 *buf, size len)
@@ -261,7 +353,7 @@ static size plt_read(i32 fd, u8 *buf, size len)
     return read(fd, buf, to_usize(len));
 }
 
-static void plt_exit(i32 rc)
+static _Noreturn void plt_exit(i32 rc)
 {
     exit(rc);
 }
@@ -269,11 +361,14 @@ static void plt_exit(i32 rc)
 int main(int argc, char **argv)
 {
     size cap = (size) 1 << 24;
-    u8 *mem = mmap(0, to_usize(cap), PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-
+    u8 *mem = mmap(0, to_usize(cap), PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (mem == MAP_FAILED) {
+        return 1;
+    }
     return re(argc, (u8 **) argv, mem, cap);
 }
 
 #else
-#error "Unsupported platform, consider porting"
+#error "Unsupported platform"
 #endif
