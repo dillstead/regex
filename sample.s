@@ -1,14 +1,14 @@
+        @ INIT(str, length)
+        @ str must be NULL-terminated, length must include NULL-terminator
 	@ r0 - r10 available	
-        @ r0 - current location in input
-        @ r1 - unused
+        @ r0 - str
+        @ r1 - length
         @ r2 - current char
         @ r3 - address in CLIST or XCHG to resume execution
         @ r4 - r9 - scratch
         @ lr - next instruction, calling into CNODE or NNODE
 INIT:
         push    {r4-r9, lr}
-        @ ensure first char is not 0 so GETCHA runs at least once
-        mov     r2, #1
         b       XCHG
 
 ADRNLIST:
@@ -21,6 +21,7 @@ ADRNLIST:
 GETCHA:
 	ldrb	r2, [r0]
 	add 	r0, r0, #1
+        sub 	r1, r1, #1
         mov     pc, lr
 
 XCHG:
@@ -46,10 +47,9 @@ XCHG:
         @ update list counts
         str     r4, NCNT
         str     r5, CCNT
-	@ if current char is 0 and CLIST count 0, fail
-	cmp	r2, #0
-	cmpeq	r5, #0
-	bne	3f
+	@ if length is 0, fail
+	cmp	r1, #0
+	bgt	3f
 	@ fail
 	mov 	r0, #0
         pop     {r4-r9, lr}
