@@ -1,31 +1,31 @@
 
-a.out:     file format elf32-littlearm
+sample:     file format elf32-littlearm
 
 
 Disassembly of section .text:
 
 00010098 <INIT>:
    10098:	e92d43f0 	push	{r4, r5, r6, r7, r8, r9, lr}
-   1009c:	e3a02001 	mov	r2, #1
-   100a0:	ea000007 	b	100c4 <XCHG>
+   1009c:	ea000008 	b	100c4 <XCHG>
 
-000100a4 <ADRNLIST>:
-   100a4:	e59f8100 	ldr	r8, [pc, #256]	; 101ac <MAXCCNT>
-   100a8:	e1a08208 	lsl	r8, r8, #4
-   100ac:	e28f9f41 	add	r9, pc, #260	; 0x104
-   100b0:	e0896008 	add	r6, r9, r8
-   100b4:	e1a0f00e 	mov	pc, lr
+000100a0 <ADRNLIST>:
+   100a0:	e59f8100 	ldr	r8, [pc, #256]	; 101a8 <MAXCCNT>
+   100a4:	e1a08208 	lsl	r8, r8, #4
+   100a8:	e28f9f41 	add	r9, pc, #260	; 0x104
+   100ac:	e0896008 	add	r6, r9, r8
+   100b0:	e1a0f00e 	mov	pc, lr
 
-000100b8 <GETCHA>:
-   100b8:	e5d02000 	ldrb	r2, [r0]
-   100bc:	e2800001 	add	r0, r0, #1
+000100b4 <GETCHA>:
+   100b4:	e5d02000 	ldrb	r2, [r0]
+   100b8:	e2800001 	add	r0, r0, #1
+   100bc:	e2411001 	sub	r1, r1, #1
    100c0:	e1a0f00e 	mov	pc, lr
 
 000100c4 <XCHG>:
-   100c4:	e59f40e8 	ldr	r4, [pc, #232]	; 101b4 <NCNT>
+   100c4:	e59f40e4 	ldr	r4, [pc, #228]	; 101b0 <NCNT>
    100c8:	e1a05004 	mov	r5, r4
-   100cc:	ebfffff4 	bl	100a4 <ADRNLIST>
-   100d0:	e28f70e0 	add	r7, pc, #224	; 0xe0
+   100cc:	ebfffff3 	bl	100a0 <ADRNLIST>
+   100d0:	e28f70dc 	add	r7, pc, #220	; 0xdc
    100d4:	ea000004 	b	100ec <XCHG+0x28>
    100d8:	e596800c 	ldr	r8, [r6, #12]
    100dc:	e587800c 	str	r8, [r7, #12]
@@ -36,119 +36,118 @@ Disassembly of section .text:
    100f0:	cafffff8 	bgt	100d8 <XCHG+0x14>
    100f4:	e24f8038 	sub	r8, pc, #56	; 0x38
    100f8:	e587800c 	str	r8, [r7, #12]
-   100fc:	e58f40b0 	str	r4, [pc, #176]	; 101b4 <NCNT>
-   10100:	e58f50a8 	str	r5, [pc, #168]	; 101b0 <CCNT>
-   10104:	e3520000 	cmp	r2, #0
-   10108:	03550000 	cmpeq	r5, #0
-   1010c:	1a000002 	bne	1011c <XCHG+0x58>
-   10110:	e3a00000 	mov	r0, #0
-   10114:	e8bd43f0 	pop	{r4, r5, r6, r7, r8, r9, lr}
-   10118:	e12fff1e 	bx	lr
-   1011c:	ebffffe5 	bl	100b8 <GETCHA>
-   10120:	e1a0300f 	mov	r3, pc
-   10124:	ea000033 	b	101f8 <CODE0>
-   10128:	ea000022 	b	101b8 <CLIST>
+   100fc:	e58f40ac 	str	r4, [pc, #172]	; 101b0 <NCNT>
+   10100:	e58f50a4 	str	r5, [pc, #164]	; 101ac <CCNT>
+   10104:	e3510000 	cmp	r1, #0
+   10108:	ca000002 	bgt	10118 <XCHG+0x54>
+   1010c:	e3a00000 	mov	r0, #0
+   10110:	e8bd43f0 	pop	{r4, r5, r6, r7, r8, r9, lr}
+   10114:	e12fff1e 	bx	lr
+   10118:	ebffffe5 	bl	100b4 <GETCHA>
+   1011c:	e1a0300f 	mov	r3, pc
+   10120:	ea000033 	b	101f4 <CODE0>
+   10124:	ea000022 	b	101b4 <CLIST>
 
-0001012c <CNODE>:
-   1012c:	e28f4084 	add	r4, pc, #132	; 0x84
-   10130:	e3a05000 	mov	r5, #0
-   10134:	e59f6074 	ldr	r6, [pc, #116]	; 101b0 <CCNT>
-   10138:	e594800c 	ldr	r8, [r4, #12]
-   1013c:	e158000e 	cmp	r8, lr
-   10140:	0a000007 	beq	10164 <CNODE+0x38>
-   10144:	e2844010 	add	r4, r4, #16
-   10148:	e2855001 	add	r5, r5, #1
-   1014c:	e1550006 	cmp	r5, r6
-   10150:	9afffff8 	bls	10138 <CNODE+0xc>
-   10154:	e5148004 	ldr	r8, [r4, #-4]
-   10158:	e504e004 	str	lr, [r4, #-4]
-   1015c:	e584800c 	str	r8, [r4, #12]
-   10160:	e58f5048 	str	r5, [pc, #72]	; 101b0 <CCNT>
-   10164:	e28ee004 	add	lr, lr, #4
-   10168:	e1a0f00e 	mov	pc, lr
+00010128 <CNODE>:
+   10128:	e28f4084 	add	r4, pc, #132	; 0x84
+   1012c:	e3a05000 	mov	r5, #0
+   10130:	e59f6074 	ldr	r6, [pc, #116]	; 101ac <CCNT>
+   10134:	e594800c 	ldr	r8, [r4, #12]
+   10138:	e158000e 	cmp	r8, lr
+   1013c:	0a000007 	beq	10160 <CNODE+0x38>
+   10140:	e2844010 	add	r4, r4, #16
+   10144:	e2855001 	add	r5, r5, #1
+   10148:	e1550006 	cmp	r5, r6
+   1014c:	9afffff8 	bls	10134 <CNODE+0xc>
+   10150:	e5148004 	ldr	r8, [r4, #-4]
+   10154:	e504e004 	str	lr, [r4, #-4]
+   10158:	e584800c 	str	r8, [r4, #12]
+   1015c:	e58f5048 	str	r5, [pc, #72]	; 101ac <CCNT>
+   10160:	e28ee004 	add	lr, lr, #4
+   10164:	e1a0f00e 	mov	pc, lr
 
-0001016c <NNODE>:
-   1016c:	e1a0700e 	mov	r7, lr
-   10170:	e59f403c 	ldr	r4, [pc, #60]	; 101b4 <NCNT>
-   10174:	e3a05000 	mov	r5, #0
-   10178:	ebffffc9 	bl	100a4 <ADRNLIST>
-   1017c:	ea000004 	b	10194 <NNODE+0x28>
-   10180:	e596800c 	ldr	r8, [r6, #12]
-   10184:	e1580007 	cmp	r8, r7
-   10188:	0a000006 	beq	101a8 <NNODE+0x3c>
-   1018c:	e2866010 	add	r6, r6, #16
-   10190:	e2855001 	add	r5, r5, #1
-   10194:	e1550004 	cmp	r5, r4
-   10198:	bafffff8 	blt	10180 <NNODE+0x14>
-   1019c:	e586700c 	str	r7, [r6, #12]
-   101a0:	e2844001 	add	r4, r4, #1
-   101a4:	e58f4008 	str	r4, [pc, #8]	; 101b4 <NCNT>
-   101a8:	e1a0f003 	mov	pc, r3
+00010168 <NNODE>:
+   10168:	e1a0700e 	mov	r7, lr
+   1016c:	e59f403c 	ldr	r4, [pc, #60]	; 101b0 <NCNT>
+   10170:	e3a05000 	mov	r5, #0
+   10174:	ebffffc9 	bl	100a0 <ADRNLIST>
+   10178:	ea000004 	b	10190 <NNODE+0x28>
+   1017c:	e596800c 	ldr	r8, [r6, #12]
+   10180:	e1580007 	cmp	r8, r7
+   10184:	0a000006 	beq	101a4 <NNODE+0x3c>
+   10188:	e2866010 	add	r6, r6, #16
+   1018c:	e2855001 	add	r5, r5, #1
+   10190:	e1550004 	cmp	r5, r4
+   10194:	bafffff8 	blt	1017c <NNODE+0x14>
+   10198:	e586700c 	str	r7, [r6, #12]
+   1019c:	e2844001 	add	r4, r4, #1
+   101a0:	e58f4008 	str	r4, [pc, #8]	; 101b0 <NCNT>
+   101a4:	e1a0f003 	mov	pc, r3
 
-000101ac <MAXCCNT>:
+000101a8 <MAXCCNT>:
+   101a8:	00000000 	.word	0x00000000
+
+000101ac <CCNT>:
    101ac:	00000000 	.word	0x00000000
 
-000101b0 <CCNT>:
+000101b0 <NCNT>:
    101b0:	00000000 	.word	0x00000000
 
-000101b4 <NCNT>:
-   101b4:	00000000 	.word	0x00000000
+000101b4 <CLIST>:
+   101b4:	e1a0300f 	mov	r3, pc
+   101b8:	e2833008 	add	r3, r3, #8
+   101bc:	e51ff004 	ldr	pc, [pc, #-4]	; 101c0 <CLIST+0xc>
+   101c0:	00000000 	.word	0x00000000
+   101c4:	e1a0300f 	mov	r3, pc
+   101c8:	e2833008 	add	r3, r3, #8
+   101cc:	e51ff004 	ldr	pc, [pc, #-4]	; 101d0 <CLIST+0x1c>
+   101d0:	00000000 	.word	0x00000000
 
-000101b8 <CLIST>:
-   101b8:	e1a0300f 	mov	r3, pc
-   101bc:	e2833008 	add	r3, r3, #8
-   101c0:	e51ff004 	ldr	pc, [pc, #-4]	; 101c4 <CLIST+0xc>
-   101c4:	00000000 	.word	0x00000000
-   101c8:	e1a0300f 	mov	r3, pc
-   101cc:	e2833008 	add	r3, r3, #8
-   101d0:	e51ff004 	ldr	pc, [pc, #-4]	; 101d4 <CLIST+0x1c>
-   101d4:	00000000 	.word	0x00000000
+000101d4 <NLIST>:
+   101d4:	e1a0300f 	mov	r3, pc
+   101d8:	e2833008 	add	r3, r3, #8
+   101dc:	e51ff004 	ldr	pc, [pc, #-4]	; 101e0 <NLIST+0xc>
+   101e0:	00000000 	.word	0x00000000
+   101e4:	e1a0300f 	mov	r3, pc
+   101e8:	e2833008 	add	r3, r3, #8
+   101ec:	e51ff004 	ldr	pc, [pc, #-4]	; 101f0 <NLIST+0x1c>
+   101f0:	00000000 	.word	0x00000000
 
-000101d8 <NLIST>:
-   101d8:	e1a0300f 	mov	r3, pc
-   101dc:	e2833008 	add	r3, r3, #8
-   101e0:	e51ff004 	ldr	pc, [pc, #-4]	; 101e4 <NLIST+0xc>
-   101e4:	00000000 	.word	0x00000000
-   101e8:	e1a0300f 	mov	r3, pc
-   101ec:	e2833008 	add	r3, r3, #8
-   101f0:	e51ff004 	ldr	pc, [pc, #-4]	; 101f4 <NLIST+0x1c>
-   101f4:	00000000 	.word	0x00000000
+000101f4 <CODE0>:
+   101f4:	eaffffff 	b	101f8 <CODE1>
 
-000101f8 <CODE0>:
-   101f8:	eaffffff 	b	101fc <CODE1>
+000101f8 <CODE1>:
+   101f8:	e3520061 	cmp	r2, #97	; 0x61
+   101fc:	11a0f003 	movne	pc, r3
+   10200:	ebffffd8 	bl	10168 <NNODE>
+   10204:	ea00000a 	b	10234 <CODE16>
 
-000101fc <CODE1>:
-   101fc:	e3520061 	cmp	r2, #97	; 0x61
-   10200:	11a0f003 	movne	pc, r3
-   10204:	ebffffd8 	bl	1016c <NNODE>
-   10208:	ea00000a 	b	10238 <CODE16>
+00010208 <CODE5>:
+   10208:	e3520062 	cmp	r2, #98	; 0x62
+   1020c:	11a0f003 	movne	pc, r3
+   10210:	ebffffd4 	bl	10168 <NNODE>
+   10214:	ea000006 	b	10234 <CODE16>
 
-0001020c <CODE5>:
-   1020c:	e3520062 	cmp	r2, #98	; 0x62
-   10210:	11a0f003 	movne	pc, r3
-   10214:	ebffffd4 	bl	1016c <NNODE>
-   10218:	ea000006 	b	10238 <CODE16>
+00010218 <CODE9>:
+   10218:	e3520063 	cmp	r2, #99	; 0x63
+   1021c:	11a0f003 	movne	pc, r3
+   10220:	ebffffd0 	bl	10168 <NNODE>
+   10224:	ea000002 	b	10234 <CODE16>
 
-0001021c <CODE9>:
-   1021c:	e3520063 	cmp	r2, #99	; 0x63
-   10220:	11a0f003 	movne	pc, r3
-   10224:	ebffffd0 	bl	1016c <NNODE>
-   10228:	ea000002 	b	10238 <CODE16>
+00010228 <CODE13>:
+   10228:	ebffffbe 	bl	10128 <CNODE>
+   1022c:	eafffff9 	b	10218 <CODE9>
+   10230:	eafffff4 	b	10208 <CODE5>
 
-0001022c <CODE13>:
-   1022c:	ebffffbe 	bl	1012c <CNODE>
-   10230:	eafffff9 	b	1021c <CODE9>
-   10234:	eafffff4 	b	1020c <CODE5>
+00010234 <CODE16>:
+   10234:	ebffffbb 	bl	10128 <CNODE>
+   10238:	eafffffa 	b	10228 <CODE13>
+   1023c:	eaffffff 	b	10240 <CODE19>
 
-00010238 <CODE16>:
-   10238:	ebffffbb 	bl	1012c <CNODE>
-   1023c:	eafffffa 	b	1022c <CODE13>
-   10240:	eaffffff 	b	10244 <CODE19>
-
-00010244 <CODE19>:
-   10244:	e3520064 	cmp	r2, #100	; 0x64
-   10248:	11a0f003 	movne	pc, r3
-   1024c:	ebffffc6 	bl	1016c <NNODE>
-   10250:	e3a00001 	mov	r0, #1
-   10254:	e8bd43f0 	pop	{r4, r5, r6, r7, r8, r9, lr}
-   10258:	e12fff1e 	bx	lr
+00010240 <CODE19>:
+   10240:	e3520064 	cmp	r2, #100	; 0x64
+   10244:	11a0f003 	movne	pc, r3
+   10248:	ebffffc6 	bl	10168 <NNODE>
+   1024c:	e3a00001 	mov	r0, #1
+   10250:	e8bd43f0 	pop	{r4, r5, r6, r7, r8, r9, lr}
+   10254:	e12fff1e 	bx	lr
