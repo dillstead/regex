@@ -38,6 +38,6 @@ static i64 stack_peek(struct stack *stk, size bk)
 {
     assert(!stack_is_empty(stk));
     assert(bk >= 0 && bk < stack_size(stk));
-    
-    return stk->data[stk->top - ++bk];
+
+    return stk->data[stk->top - bk - 1];
 }

@@ -1,3 +1,4 @@
+        @gcc -Werror -std=gnu99 -fno-builtin -Wall -Wextra -nostdlib -mgeneral-regs-only -fno-diagnostics-color -fpie -O2 -o sample sample.s
         @ INIT(str, length)
         @ str must be NULL-terminated, length must include NULL-terminator
 	@ r0 - r10 available	

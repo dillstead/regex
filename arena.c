@@ -1,7 +1,6 @@
 struct arena {
     u8 *beg;
     u8 *end;
-    size sz;
     // Called before out-of-memory.
     void (*cb)(void *usr);
     void *usr;

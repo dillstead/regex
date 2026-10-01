@@ -13,12 +13,11 @@ static void fill(struct buf *b)
 {
     b->len = 0;
     b->pos = 0;
-    while (!b->eof && !b->err && b->len < b->cap) {
-        size amt = b->cap - b->len;
-        size br = plt_read(b->fd, b->buf + b->len, amt);
+    if (!b->eof && !b->err) {
+        size br = plt_read(b->fd, b->buf, b->cap);
 
         if (br > 0) {
-            b->len += br;
+            b->len = br;
         } else {
             b->err = br < 0;
             b->eof = br == 0;
@@ -52,6 +51,18 @@ static size input(struct buf *b, u8 *dst, size len)
     return tot;
 }
 
+static void grow_line(struct arena *a, u8 **linep, size *cap)
+{
+    if (*linep + *cap == a->beg) {
+        new(a, u8, *cap);
+    } else {
+        u8 *line = new(a, u8, *cap * 2);
+        xcpy(line, *linep, to_usize(*cap));
+        *linep = line;
+    }
+    *cap *= 2;
+}
+
 static size get_line(struct arena *a, struct buf *buf, u8 **linep, size *cap)
 {
     size cnt = 0;
@@ -59,10 +70,7 @@ static size get_line(struct arena *a, struct buf *buf, u8 **linep, size *cap)
 
     while (c != '\n' && input(buf, &c, 1) > 0) {
         if (cnt == *cap) {
-            *cap *= 2;
-            u8 *line = new(a, u8, *cap);
-            xcpy(line, *linep, to_usize(cnt));
-            *linep = line;
+            grow_line(a, linep, cap);
         }
         (*linep)[cnt++] = c;
     }
@@ -117,6 +125,5 @@ static void append_int(struct buf *buf, i64 x)
 
 #define append_i64(b, i)  append_int((b), (i64) (i))
 #define append_size(b, i) append_i64((b), (i))
-#define append_str(b, s)  append((b), (u8 *) (s), strlen((s)))
 #define append_cstr(b, s) append((b), (u8 *) (s), lengthof((s)))
 #define append_s8(b, s)   append((b), s.data, s.len)
