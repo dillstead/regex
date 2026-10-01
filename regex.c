@@ -1,3 +1,4 @@
+// TODO: tmp scratch naming
 // gcc -Werror -Wall -Wextra -Wno-error=unused-parameter -Wno-error=unused-function -Wno-error=unused-variable -Wconversion -Wno-error=sign-conversion -fsanitize=undefined -fno-diagnostics-color -DTEST -O0 -g3 -o regex regex.c && echo "no error"
 #include <stddef.h>
 #include <stdint.h>
@@ -68,7 +69,10 @@ static _Noreturn void plt_exit(i32 rc);
 #include "s8.c"
 #include "stack.c"
 
-static b32 (*arch_compile(struct arena a, struct s8 re))(const u8 *);
+// The matcher takes (str, length). str must be NULL-terminated and length
+// must include the terminator: a match ending on the last character is only
+// reported on the NULL-terminator's iteration. 
+static b32 (*arch_compile(struct arena, struct s8))(const u8 *, size);
 
 static struct buf in = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 0, 0, 0 };
 static struct buf out = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 1, 0, 0 };
@@ -127,10 +131,10 @@ static bool check_syntax(struct s8 re)
     return true;
 }
 
-static struct s8 add_concat(struct arena *a, struct s8 re)
+static struct s8 add_concat(struct arena *perm, struct s8 re)
 {
     struct s8 cre = { 0 };
-    cre.data = new(a, u8, re.len * 2);
+    cre.data = new(perm, u8, re.len * 2);
 
     for (size i = 0; i < re.len - 1; i++) {
         u8 l = re.data[i];
@@ -147,23 +151,28 @@ static struct s8 add_concat(struct arena *a, struct s8 re)
     return cre;
 }
 
-static bool to_postfix(struct arena *a, struct s8 re, struct s8 *pre)
+static bool to_postfix(struct arena *perm, struct s8 re, struct s8 *pre)
 {
     u32 prec[256];
-    xset(prec, 5, sizeof(prec));
+    for (size i = 0; i < countof(prec); i++) {
+        prec[i] = 5;
+    }
     prec['('] = 1;
     prec['|'] = 2;
     prec['.'] = 3;
     prec['*'] = 4;
 
+    struct arena start = *perm;
     xset(pre, 0, sizeof(*pre));
-    pre->data = new(a, u8, re.len);
+    pre->data = new(perm, u8, re.len);
 
-    struct arena tmp = *a;
+    struct arena scratch = *perm;
     struct stack stk;
-    stack_init(a, re.len, &stk);
+    stack_init(&scratch, re.len, &stk);
 
-    for (size i = 0; i < re.len; i++) {
+    bool success = true;
+
+    for (size i = 0; success && i < re.len; i++) {
         switch (re.data[i]) {
         case '(': {
             stack_push(&stk, re.data[i]);
@@ -180,7 +189,7 @@ static bool to_postfix(struct arena *a, struct s8 re, struct s8 *pre)
                 pre->data[pre->len++] = to_u8(val);
             }
             if (!found) {
-                return false;
+                success = false;
             }
             break;
         }
@@ -195,16 +204,19 @@ static bool to_postfix(struct arena *a, struct s8 re, struct s8 *pre)
         }
     }
 
-    while (!stack_is_empty(&stk)) {
+    while (success && !stack_is_empty(&stk)) {
         i64 val = stack_pop(&stk);
-        if (val == '(') {
-            return false;
+        if (val != '(') {
+            pre->data[pre->len++] = to_u8(val);
+        } else {
+            success = false;
         }
-        pre->data[pre->len++] = to_u8(val);
     }
 
-    *a = tmp;
-    return true;
+    if (!success) {
+        *perm = start;
+    }
+    return success;
 }
 
 // Rejects a closure whose operand can match the empty string (e.g. a**).
@@ -245,7 +257,7 @@ static bool check_closures(struct arena scratch, struct s8 pre)
 }
 
 // todo: use scrach arenas
-static i32 re_(i32 argc, u8 **argv, struct arena *a)
+static i32 re_(i32 argc, u8 **argv, struct arena *perm)
 {
     if (argc != 2) {
         append_cstr(&err, "usage: regex <regex> < stdin\n");
@@ -258,34 +270,41 @@ static i32 re_(i32 argc, u8 **argv, struct arena *a)
         return 1;
     }
 
-    re = add_concat(a, re);
+    re = add_concat(perm, re);
     struct s8 pre;
-    if (!to_postfix(a, re, &pre)) {
+    if (!to_postfix(perm, re, &pre)) {
         append_cstr(&err, "error: mismatched parenthesis\n");
         return 1;
     }
 
-    if (!check_closures(*a, pre)) {
-        append_cstr(&err, "error: closure of an expression that can match the empty string\n");
+    if (!check_closures(*perm, pre)) {
+        append_cstr(&err, "error: empty closure\n");
         return 1;
     }
 
-    b32 (*match)(const u8 *) = arch_compile(*a, pre);
+    b32 (*match)(const u8 *, size) = arch_compile(*perm, pre);
     if (!match) {
         append_cstr(&err, "error: compile\n");
         return 1;
     }
 
-    size cap = 1 << 8;
     size cnt;
-    u8 *line = new(a, u8, cap);
-    while ((cnt = get_line(a, &in, &line, &cap)) > 0) {
-        struct arena tmp = *a;
-        struct s8 cline = s8cat(a, (struct s8) {line, cnt}, s8nul);
-        if (match(cline.data)) {
-            append(&out, line, cnt);
+    for (;;) {
+        struct arena scratch = *perm;
+        size cap = 1 << 8;
+        u8 *line = new(&scratch, u8, cap);
+        cnt = get_line(&scratch, &in, &line, &cap);
+        if (cnt <= 0) {
+            break;
         }
-        *a = tmp;
+
+        struct s8 cline = s8cat(&scratch, (struct s8) {line, cnt}, s8nul);
+        if (match(cline.data, cline.len)) {
+            append(&out, line, cnt);
+            if (line[cnt - 1] != '\n') {
+                append_cstr(&out, "\n");
+            }
+        }
     }
     return cnt < 0;
 }
@@ -315,7 +334,7 @@ static void oom_cb(void *usr)
 
 static i32 re(i32 argc, u8 **argv, u8 *mem, size cap)
 {
-    struct arena a = { mem, mem + cap, cap, oom_cb, NULL };
+    struct arena a = { mem, mem + cap, oom_cb, NULL };
 #ifndef TEST
     i32 rc = re_(argc, argv, &a);
 #else
@@ -326,7 +345,8 @@ static i32 re(i32 argc, u8 **argv, u8 *mem, size cap)
     return rc;
 }
 
-#if defined(__arm__)
+//#if defined(__arm__)
+#if 1
 #include "arm.c"
 #else
 #error "Unsupported architecture"
