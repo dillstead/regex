@@ -265,23 +265,91 @@ static bool test_match(struct arena scratch)
         b32 expected;
     };
     struct test_case tcs[] = {
-        { s8("a"), s8("a\0"), true },
-        { s8("a"), s8("b\0"), false },
+        { s8("a"),               s8("a\0"),             true  },  // a
+        { s8("a"),               s8("b\0"),             false },  // a
+        // empty pattern and empty input
+        { s8(""),                s8("\0"),              true  },  // (empty)
+        { s8(""),                s8("abc\0"),           true  },  // (empty)
+        { s8("a"),               s8("\0"),              false },  // a
+        { s8("a*"),              s8("\0"),              true  },  // a*
+        // literals: case sensitive, digits, space
+        { s8("a"),               s8("A\0"),             false },  // a
+        { s8("Z"),               s8("Z\0"),             true  },  // Z
+        { s8("7"),               s8("x7y\0"),           true  },  // 7
+        { s8(" "),               s8("a b\0"),           true  },  // (space)
+        { s8(" "),               s8("ab\0"),            false },  // (space)
+        // unanchored: match at start, middle, end
+        { s8("a"),               s8("abc\0"),           true  },  // a
+        { s8("b"),               s8("abc\0"),           true  },  // b
+        { s8("c"),               s8("abc\0"),           true  },  // c
+        { s8("d"),               s8("abc\0"),           false },  // d
+        // concatenation
+        { s8("ab.c."),           s8("abc\0"),           true  },  // abc
+        { s8("ab.c."),           s8("xxabcxx\0"),       true  },  // abc
+        { s8("ab.c."),           s8("ab\0"),            false },  // abc
+        { s8("ab.c."),           s8("acb\0"),           false },  // abc
+        { s8("ab.c."),           s8("ab c\0"),          false },  // abc
+        // restart after a partial match
+        { s8("aa.b."),           s8("aaab\0"),          true  },  // aab
+        { s8("ab.a.b."),         s8("abaabab\0"),       true  },  // abab
+        { s8("ab.a.b."),         s8("abaaba\0"),        false },  // abab
+        // alternation
+        { s8("ab|"),             s8("a\0"),             true  },  // a|b
+        { s8("ab|"),             s8("b\0"),             true  },  // a|b
+        { s8("ab|"),             s8("c\0"),             false },  // a|b
+        { s8("ab|c|"),           s8("xxc\0"),           true  },  // a|b|c
+        { s8("ab.c.ab.d.|"),     s8("abd\0"),           true  },  // abc|abd
+        { s8("ab.c.ab.d.|"),     s8("abe\0"),           false },  // abc|abd
+        { s8("ab.cd.|"),         s8("acbd\0"),          false },  // ab|cd
+        { s8("abc|.d."),         s8("acd\0"),           true  },  // a(b|c)d
+        { s8("abc|.d."),         s8("abd\0"),           true  },  // a(b|c)d
+        { s8("abc|.d."),         s8("ad\0"),            false },  // a(b|c)d
+        { s8("abc|.d."),         s8("abcd\0"),          false },  // a(b|c)d
+        // closure
+        { s8("a*"),              s8("bbb\0"),           true  },  // a*
+        { s8("ab*.c."),          s8("ac\0"),            true  },  // ab*c
+        { s8("ab*.c."),          s8("abc\0"),           true  },  // ab*c
+        { s8("ab*.c."),          s8("abbbbbbbbc\0"),    true  },  // ab*c
+        { s8("ab*.c."),          s8("abbbbdc\0"),       false },  // ab*c
+        { s8("ab*.c."),          s8("ab\0"),            false },  // ab*c
+        { s8("xab.*.c."),        s8("xc\0"),            true  },  // x(ab)*c
+        { s8("xab.*.c."),        s8("xababc\0"),        true  },  // x(ab)*c
+        { s8("xab.*.c."),        s8("xabac\0"),         false },  // x(ab)*c
+        { s8("xab|*.c."),        s8("xabbac\0"),        true  },  // x(a|b)*c
+        { s8("xab|*.c."),        s8("xab\0"),           false },  // x(a|b)*c
+        { s8("xab|*.y."),        s8("xababababbbay\0"), true  },  // x(a|b)*y
+        { s8("xab|*.y."),        s8("xabzy\0"),         false },  // x(a|b)*y
+        // nested, and paths that share list entries
+        { s8("xab|cd|.*.e."),    s8("xacbde\0"),        true  },  // x((a|b)(c|d))*e
+        { s8("xab|cd|.*.e."),    s8("xacbe\0"),         false },  // x((a|b)(c|d))*e
+        { s8("xaa.a|*.b."),      s8("xaaaaab\0"),       true  },  // x(aa|a)*b
+        { s8("xaa.a|*.b."),      s8("xaaaaa\0"),        false },  // x(aa|a)*b
+        { s8("xa*.a*.a*.b."),    s8("xaaaaaaaab\0"),    true  },  // xa*a*a*b
+        { s8("xa*.a*.a*.b."),    s8("xaaaaaaaa\0"),     false },  // xa*a*a*b
+        { s8("xaab.|.cbc.d.|."), s8("xabcd\0"),         true  },  // x(a|ab)(c|bcd)
+        { s8("xaab.|.cbc.d.|."), s8("xabd\0"),          false },  // x(a|ab)(c|bcd)
+        { s8("xa*b.*.c."),       s8("xabaabbc\0"),      true  },  // x(a*b)*c
+        { s8("xa*b.*.c."),       s8("xabaac\0"),        false },  // x(a*b)*c
+        // match ending on the last character before the terminator
+        { s8("ab."),             s8("xxab\0"),          true  },  // ab
+        { s8("ab*."),            s8("xxabbb\0"),        true  },  // ab*
+        // embedded NUL does not end the line
+        { s8("b"),               s8("a\0b\0"),          true  },  // b
+        { s8("ab."),             s8("a\0b\0"),          false },  // ab
     };
     bool passed = true;
 
     for (size i = 0; i <= lengthof(tcs); i++) {
         b32 (*match)(const u8 *, size) = arch_compile(scratch, tcs[i].re);
         bool res = match != NULL;
-        passed = passed && res;
         if (res) {
             res = match(tcs[i].input.data, tcs[i].input.len) == tcs[i].expected;
-            passed = passed && res;
-            if (!res) {
-                append_cstr(&out, "match test ");
-                append_size(&out, i + 1);
-                append_cstr(&out, " failed\n");
-            }
+        }
+        passed = passed && res;
+        if (!res) {
+            append_cstr(&out, "match test ");
+            append_size(&out, i + 1);
+            append_cstr(&out, " failed\n");
         }
     }
     return passed;
