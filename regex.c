@@ -1,4 +1,3 @@
-// TODO: tmp scratch naming
 // gcc -Werror -Wall -Wextra -Wno-error=unused-parameter -Wno-error=unused-function -Wno-error=unused-variable -Wconversion -Wno-error=sign-conversion -fsanitize=undefined -fno-diagnostics-color -DTEST -O0 -g3 -o regex regex.c && echo "no error"
 #include <stddef.h>
 #include <stdint.h>
@@ -153,7 +152,7 @@ static struct s8 add_concat(struct arena *perm, struct s8 re)
 
 static bool to_postfix(struct arena *perm, struct s8 re, struct s8 *pre)
 {
-    u32 prec[256];
+    u8 prec[256];
     for (size i = 0; i < countof(prec); i++) {
         prec[i] = 5;
     }
@@ -318,6 +317,7 @@ static i32 test_re_(struct arena *a)
     passed = passed && test_add_concat(*a);
     passed = passed && test_to_postfix(*a);
     passed = passed && test_check_closures(*a);
+    passed = passed && test_match(*a);
     if (passed) {
         append_cstr(&out, "all tests passed\n");
     }
