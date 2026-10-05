@@ -256,3 +256,33 @@ static bool test_check_closures(struct arena scratch)
     }
     return passed;
 }
+
+static bool test_match(struct arena scratch)
+{
+    struct test_case {
+        struct s8 re;
+        struct s8 input;
+        b32 expected;
+    };
+    struct test_case tcs[] = {
+        { s8("a"), s8("a\0"), true },
+        { s8("a"), s8("b\0"), false },
+    };
+    bool passed = true;
+
+    for (size i = 0; i <= lengthof(tcs); i++) {
+        b32 (*match)(const u8 *, size) = arch_compile(scratch, tcs[i].re);
+        bool res = match != NULL;
+        passed = passed && res;
+        if (res) {
+            res = match(tcs[i].input.data, tcs[i].input.len) == tcs[i].expected;
+            passed = passed && res;
+            if (!res) {
+                append_cstr(&out, "match test ");
+                append_size(&out, i + 1);
+                append_cstr(&out, " failed\n");
+            }
+        }
+    }
+    return passed;
+}
