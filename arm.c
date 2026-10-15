@@ -238,7 +238,7 @@ static b32 get_sizes(struct s8 re, struct cre_sizes *s)
     return s->total_sz < (1 << 25);
 }
 
-static b32 (*arch_compile(struct arena scratch, struct s8 re))(const u8 *, size)
+static b32 (*arch_compile(struct arena scratch, struct s8 re, size *sz))(const u8 *, size)
 {
     struct cre_sizes s;
     if (!get_sizes(re, &s)) {
@@ -246,6 +246,7 @@ static b32 (*arch_compile(struct arena scratch, struct s8 re))(const u8 *, size)
         return NULL;
     }
 
+    *sz = s.total_sz;
     u8 *cre = plt_mmap(s.total_sz, PLT_READ | PLT_WRITE | PLT_EXEC,
                        PLT_MAP_PRIVATE | PLT_MAP_ANON);
     if (cre == PLT_MAP_FAILED) {

@@ -59,6 +59,7 @@ enum {
 #define PLT_MAP_FAILED ((void *) -1)
 
 static void *plt_mmap(size, i32, i32);
+static void plt_munmap(void *, size);
 static size plt_write(i32, u8 *, size);
 static size plt_read(i32, u8 *, size);
 static _Noreturn void plt_exit(i32 rc);
@@ -71,7 +72,7 @@ static _Noreturn void plt_exit(i32 rc);
 // The matcher takes (str, length). str must be NULL-terminated and length
 // must include the terminator: a match ending on the last character is only
 // reported on the NULL-terminator's iteration. 
-static b32 (*arch_compile(struct arena, struct s8))(const u8 *, size);
+static b32 (*arch_compile(struct arena, struct s8, size *sz))(const u8 *, size);
 
 static struct buf in = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 0, 0, 0 };
 static struct buf out = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 1, 0, 0 };
@@ -255,7 +256,6 @@ static bool check_closures(struct arena scratch, struct s8 pre)
     return true;
 }
 
-// todo: use scrach arenas
 static i32 re_(i32 argc, u8 **argv, struct arena *perm)
 {
     if (argc != 2) {
@@ -281,7 +281,8 @@ static i32 re_(i32 argc, u8 **argv, struct arena *perm)
         return 1;
     }
 
-    b32 (*match)(const u8 *, size) = arch_compile(*perm, pre);
+    size match_sz;
+    b32 (*match)(const u8 *, size) = arch_compile(*perm, pre, &match_sz);
     if (!match) {
         append_cstr(&err, "error: compile\n");
         return 1;
@@ -336,8 +337,12 @@ static i32 re(i32 argc, u8 **argv, u8 *mem, size cap)
 {
     struct arena a = { mem, mem + cap, oom_cb, NULL };
 #ifndef TEST
+    (void) test_re_;
     i32 rc = re_(argc, argv, &a);
 #else
+    (void) argc;
+    (void) argv;
+    (void) re_;
     i32 rc = test_re_(&a);
 #endif
     flush(&out);
@@ -361,6 +366,11 @@ static i32 re(i32 argc, u8 **argv, u8 *mem, size cap)
 static void *plt_mmap(size sz, i32 prot, i32 flgs)
 {
     return mmap(0, to_usize(sz), prot, flgs, -1, 0);
+}
+
+static void plt_munmap(void *addr, size sz)
+{
+    munmap(addr, to_usize(sz));
 }
 
 static size plt_write(i32 fd, u8 *buf, size len)

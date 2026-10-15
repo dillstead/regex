@@ -340,10 +340,12 @@ static bool test_match(struct arena scratch)
     bool passed = true;
 
     for (size i = 0; i <= lengthof(tcs); i++) {
-        b32 (*match)(const u8 *, size) = arch_compile(scratch, tcs[i].re);
+        size match_sz;
+        b32 (*match)(const u8 *, size) = arch_compile(scratch, tcs[i].re, &match_sz);
         bool res = match != NULL;
         if (res) {
             res = match(tcs[i].input.data, tcs[i].input.len) == tcs[i].expected;
+            plt_munmap(match, match_sz);
         }
         passed = passed && res;
         if (!res) {
