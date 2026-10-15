@@ -53,3 +53,9 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Fuzzing
+/fuzz
+/fuzz-thumb
+/fuzz-replay
+/afl/out/
