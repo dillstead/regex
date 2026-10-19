@@ -59,3 +59,8 @@ dkms.conf
 /fuzz-thumb
 /fuzz-replay
 /afl/out/
+/regex
+/regex-thumb
+/regex-test
+/regex-test-thumb
+/fuzz-replay-thumb

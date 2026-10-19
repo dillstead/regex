@@ -6,18 +6,25 @@
 // line is run through the compiled matcher. Results are ignored: only
 // crashes, sanitizer reports and hangs count.
 //
-// Build and run on 32-bit ARM (armhf userland; aarch64 does not define
-// __arm__). Build both with and without -marm to cover interworking:
-//   afl-gcc-fast -g3 -fsanitize=address,undefined
-//       -fno-sanitize-recover=undefined -o fuzz fuzz.c
-//   export ASAN_OPTIONS="abort_on_error=1:halt_on_error=1:symbolize=0"
-//   ASAN_OPTIONS+=":detect_stack_use_after_return=1"
-//   ASAN_OPTIONS+=":max_malloc_fill_size=$((1<<30))"
-//   export UBSAN_OPTIONS="halt_on_error=1:abort_on_error=1:symbolize=0"
-//   afl-fuzz -i afl/seeds -x afl/regex.dict -o afl/out ./fuzz
+// Build and run on 32-bit ARM, with the Makefile in the repo root. Each binary
+// comes as -marm and -mthumb to cover interworking. The ASan runtime is linked
+// statically because Raspberry Pi OS preloads libarmmem via
+// /etc/ld.so.preload, and a shared ASan runtime refuses to start unless it is
+// loaded first.
 //
-// The same source builds without AFL (e.g. plain gcc) to replay one input
-// from stdin:
+// AFL builds (afl-clang-fast, persistent mode):
+//   make fuzz fuzz-thumb
+//     afl-clang-fast -O2 -g -fsanitize=address,undefined
+//         -fno-sanitize-recover=undefined -static-libsan -marm -o fuzz fuzz.c
+//     (fuzz-thumb: -mthumb)
+//   afl/fuzz-arm.sh, afl/fuzz-thumb.sh  (sanitizer environment: afl/env.sh)
+//
+// Replay builds (plain gcc, no AFL macros) run one input from stdin:
+//   make fuzz-replay fuzz-replay-thumb
+//     gcc -O2 -g -fsanitize=address,undefined
+//         -fno-sanitize-recover=undefined -static-libasan -marm
+//         -o fuzz-replay fuzz.c
+//     (fuzz-replay-thumb: -mthumb)
 //   ./fuzz-replay < afl/out/default/crashes/id:000000,...
 //
 // The JIT code is not instrumented, so ASan cannot see its memory accesses.
@@ -152,5 +159,6 @@ int main(void)
         struct arena a = { mem, mem + cap, fuzz_oom, NULL };
         fuzz_one(a, g, buf, len);
     }
+    free(mem);  // keep LeakSanitizer quiet at exit
     return 0;
 }
