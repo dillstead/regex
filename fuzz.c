@@ -6,25 +6,22 @@
 // line is run through the compiled matcher. Results are ignored: only
 // crashes, sanitizer reports and hangs count.
 //
-// Build and run on 32-bit ARM, with the Makefile in the repo root. Each binary
-// comes as -marm and -mthumb to cover interworking. The ASan runtime is linked
-// statically because Raspberry Pi OS preloads libarmmem via
-// /etc/ld.so.preload, and a shared ASan runtime refuses to start unless it is
-// loaded first.
+// Build and run on 32-bit ARM, with the Makefile in the repo root. Everything
+// is built with -marm. The ASan runtime is linked statically because
+// Raspberry Pi OS preloads libarmmem via /etc/ld.so.preload, and a shared
+// ASan runtime refuses to start unless it is loaded first.
 //
-// AFL builds (afl-clang-fast, persistent mode):
-//   make fuzz fuzz-thumb
-//     afl-clang-fast -O2 -g -fsanitize=address,undefined
-//         -fno-sanitize-recover=undefined -static-libsan -marm -o fuzz fuzz.c
-//     (fuzz-thumb: -mthumb)
-//   afl/fuzz-arm.sh, afl/fuzz-thumb.sh  (sanitizer environment: afl/env.sh)
+// AFL builds (afl-gcc-fast, AFL++'s GCC plugin, persistent mode):
+//   make fuzz
+//     afl-gcc-fast -O2 -g -fsanitize=address,undefined
+//         -fno-sanitize-recover=undefined -static-libasan -marm -o fuzz fuzz.c
+//   afl/fuzz-arm.sh  (sanitizer environment: afl/env.sh)
 //
 // Replay builds (plain gcc, no AFL macros) run one input from stdin:
-//   make fuzz-replay fuzz-replay-thumb
+//   make fuzz-replay
 //     gcc -O2 -g -fsanitize=address,undefined
 //         -fno-sanitize-recover=undefined -static-libasan -marm
 //         -o fuzz-replay fuzz.c
-//     (fuzz-replay-thumb: -mthumb)
 //   ./fuzz-replay < afl/out/default/crashes/id:000000,...
 //
 // The JIT code is not instrumented, so ASan cannot see its memory accesses.
