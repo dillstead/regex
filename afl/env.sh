@@ -1,5 +1,5 @@
-# Sanitizer environment for running the AFL binaries (fuzz, fuzz-thumb).
-# Sourced by fuzz-arm.sh and fuzz-thumb.sh. Source it by hand before running
+# Sanitizer environment for running the AFL binary (fuzz).
+# Sourced by fuzz-arm.sh. Source it by hand before running
 # afl-tmin or afl-fuzz directly:
 #
 #   . afl/env.sh
