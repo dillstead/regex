@@ -10,6 +10,9 @@
         @ lr - next instruction, calling into CNODE or NNODE
 INIT:
         push    {r4-r9, lr}
+        @ discard NLIST left over from the previous call
+        mov     r4, #0
+        str     r4, NCNT
         b       XCHG
 
 ADRNLIST:

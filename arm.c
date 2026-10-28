@@ -50,10 +50,10 @@ static u32 emit_bl(i32 here, i32 target)
 
 // Offsets are in bytes.
 enum {
-    XCHG_CODE0_OFF  = 34 * sizeof(u32),
-    CNODE_OFF       = 36 * sizeof(u32),
-    NNODE_OFF       = 52 * sizeof(u32),
-    MAXCCNT_OFF     = 68 * sizeof(u32),
+    XCHG_CODE0_OFF  = 36 * sizeof(u32),
+    CNODE_OFF       = 38 * sizeof(u32),
+    NNODE_OFF       = 54 * sizeof(u32),
+    MAXCCNT_OFF     = 70 * sizeof(u32),
     ALPHA_B_OFF     =  0 * sizeof(u32),
     ALPHA_BL_OFF    =  3 * sizeof(u32),
     ALPHA_CMP_OFF   =  1 * sizeof(u32),
@@ -69,6 +69,8 @@ enum {
 static const u32 runtime_tmpl[] = {
     // INIT:
     0xe92d43f0,     // push  {r4-r9, lr}
+    0xe3a04000,     // mov   r4, #0
+    0xe58f4110,     // str   r4, NCNT
     0xea000008,     // b     XCHG
 
     // ADRNLIST:
