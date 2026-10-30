@@ -1,15 +1,17 @@
         @gcc -Werror -std=gnu99 -fno-builtin -Wall -Wextra -nostdlib -mgeneral-regs-only -fno-diagnostics-color -fpie -O2 -o sample sample.s
         @ INIT(str, length)
         @ str must be NULL-terminated, length must include NULL-terminator
-	@ r0 - r10 available	
         @ r0 - str
         @ r1 - length
         @ r2 - current char
         @ r3 - address in CLIST or XCHG to resume execution
         @ r4 - r9 - scratch
+        @ r10 - start position of the current thread, loaded by its list entry
+        @ r11 - current position in the input, incremented by GETCHA
         @ lr - next instruction, calling into CNODE or NNODE
 INIT:
-        push    {r4-r9, lr}
+        push    {r4-r11, lr}
+        mov     r11, #0
         @ discard NLIST left over from the previous call
         mov     r4, #0
         str     r4, NCNT
@@ -17,7 +19,7 @@ INIT:
 
 ADRNLIST:
         ldr     r8, MAXCCNT
-        lsl     r8, r8, #4
+        lsl     r8, r8, #5
         adr     r9, CLIST
         add     r6, r9, r8
         mov     pc, lr
@@ -26,6 +28,7 @@ GETCHA:
 	ldrb	r2, [r0]
 	add 	r0, r0, #1
         sub 	r1, r1, #1
+        add     r11, r11, #1
         mov     pc, lr
 
 XCHG:
@@ -36,18 +39,20 @@ XCHG:
         adr     r7, CLIST
         b       1f
 2:
-        ldr     r8, [r6, #12]
-        str     r8, [r7, #12]
-        @ copy from NLIST to CLIST
-        add     r6, r6, #16
-        add     r7, r7, #16
+        @ copy target and start from NLIST to CLIST
+        ldr     r8, [r6, #16]
+        str     r8, [r7, #16]
+        ldr     r8, [r6, #20]
+        str     r8, [r7, #20]
+        add     r6, r6, #32
+        add     r7, r7, #32
         add     r4, r4, #-1
 1:      
         cmp     r4, #0
         bgt     2b
         @ copy XCHG to last entry in CLIST
         adr     r8, XCHG
-        str     r8, [r7, #12]
+        str     r8, [r7, #16]
         @ update list counts
         str     r4, NCNT
         str     r5, CCNT
@@ -56,9 +61,11 @@ XCHG:
 	bgt	3f
 	@ fail
 	mov 	r0, #0
-        pop     {r4-r9, lr}
+        pop     {r4-r11, lr}
         bx	lr
 3:
+        @ the thread started by CODE0 begins at the next char
+        mov     r10, r11
         @ get next character from input
         bl      GETCHA
         mov     r3, pc
@@ -75,18 +82,19 @@ CNODE:
         ldr     r6, CCNT
 	@ search CLIST for duplicates
 1:
-        ldr     r8, [r4, #12]
+        ldr     r8, [r4, #16]
         cmp     r8, lr
         @ if value already exists, return
         beq     2f
-        add     r4, r4, #16
+        add     r4, r4, #32
         add     r5, r5, #1
         cmp     r5, r6
         bls     1b
-        @ move EXCHG up and store new entry
-        ldr     r8, [r4, #-4]
-        str     lr, [r4, #-4]
-        str     r8, [r4, #12]
+        @ move EXCHG up and store new entry with the current start
+        ldr     r8, [r4, #-16]
+        str     lr, [r4, #-16]
+        str     r10, [r4, #-12]
+        str     r8, [r4, #16]
         str     r5, CCNT
 2:
         @ return CODE + 1
@@ -104,17 +112,18 @@ NNODE:
         @ r7 saved lr
         b       1f
 2:
-        ldr     r8, [r6, #12]
+        ldr     r8, [r6, #16]
         cmp     r8, r7
         @ if value already exists, return
         beq     3f
-        add     r6, r6, #16
+        add     r6, r6, #32
         add     r5, r5, #1
 1:
         cmp     r5, r4
         blt     2b
-        @ store
-        str     r7, [r6, #12]
+        @ store target and start
+        str     r7, [r6, #16]
+        str     r10, [r6, #20]
         @ inc NCNT
         add     r4, r4, #1
         str     r4, NCNT
@@ -134,25 +143,43 @@ NCNT:
         
 CLIST:  
         mov 	r3, pc
-        add 	r3, r3, #8
+        add 	r3, r3, #24
+        ldr     r10, [pc, #4]
         ldr 	pc, [pc, #-4]
-        @ run time patch
+        @ run time patch: target
+        .word	0x00000000
+        @ run time patch: start
+        .word	0x00000000
+        @ pad to 32 bytes
+        .word	0x00000000
         .word	0x00000000
 
         mov 	r3, pc
-        add 	r3, r3, #8
+        add 	r3, r3, #24
+        ldr     r10, [pc, #4]
         ldr 	pc, [pc, #-4]
+        .word	0x00000000
+        .word	0x00000000
+        .word	0x00000000
         .word	0x00000000
         
 NLIST:
         mov 	r3, pc
-        add 	r3, r3, #8
+        add 	r3, r3, #24
+        ldr     r10, [pc, #4]
         ldr 	pc, [pc, #-4]
+        .word	0x00000000
+        .word	0x00000000
+        .word	0x00000000
         .word	0x00000000
 
         mov 	r3, pc
-        add 	r3, r3, #8
+        add 	r3, r3, #24
+        ldr     r10, [pc, #4]
         ldr 	pc, [pc, #-4]
+        .word	0x00000000
+        .word	0x00000000
+        .word	0x00000000
         .word	0x00000000
 
 CODE0:
@@ -189,5 +216,5 @@ CODE19:
 	bl	NNODE
 	@ success
         mov 	r0, #1
-        pop    {r4-r9, lr}
+        pop    {r4-r11, lr}
 	bx	lr
