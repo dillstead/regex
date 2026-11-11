@@ -14,7 +14,7 @@ INIT:
         push    {r4-r12, lr}
         mvn     r12, #0
         mov     r11, #0
-        @ discard NLIST left over from the previous call
+	@ NCNT might be stale from previous call, zero it
         mov     r4, #0
         str     r4, NCNT
         b       XCHG
@@ -34,49 +34,70 @@ GETCHA:
         mov     pc, lr
 
 XCHG:
-        @ r4 start of NLIST
-        @ r5 start of CLIST
+	@ r4 start of NLIST
+	@ r5 end of NLIST
         @ r6 NCNT
-        @ r7 CLIDX
-        bl      ADRNLIST
-        adr     r5, CLIST
+	@ r7 start of CLIST
+	bl      ADRNLIST
         ldr     r6, NCNT
-        mov     r7, r6
-        b       1f
-2:
-        @ copy target and start from NLIST to CLIST
-        ldr     r8, [r4, #16]
-        str     r8, [r5, #16]
-        ldr     r8, [r4, #20]
-        str     r8, [r5, #20]
-        add     r4, r4, #32
-        add     r5, r5, #32
-        add     r6, r6, #-1
+        lsl     r5, r6, #5
+        add     r5, r4, r5
+	adr     r7, CLIST
+	@ no more NNODES, done
+	cmp	r11, #0
+	beq	2f
+	cmp	r6, #0
+	beq	4f
+	@ copy NNODES to CLIST
+	b	2f
 1:
-        cmp     r6, #0
-        bgt     2b
-        @ copy XCHG to last entry in CLIST
-        adr     r8, XCHG
-        str     r8, [r5, #16]
+        ldr     r8, [r4, #16]
+        cmp     r8, r7
+        beq     3f
+        add     r4, r4, #32
+
+	ldr     r8, [r4, #16]
+        str     r8, [r7, #16]
+        ldr     r8, [r4, #20]
+        str     r8, [r7, #20]
+        add     r4, r4, #32
+        add     r7, r7, #32
+2:
+        cmp     r4, r5
+        blo     1b
+	@ if no match found, copy START to CLIST
+	cmn	r12, #1
+	bne	3
+	adr     r8, DONE
+        str     r8, [r7, #16]
+	@ current input position
+	str     r11, [r7, #20]
+	add	r6, r6, #1
+	add     r7, r7, #32
+3:
+	@ copy XCHG to CLIST
+	adr     r8, XCHG
+        str     r8, [r7, #16]
         @ update list counts
+	str     r6, CLIDX
+	mov	r6, #0
         str     r6, NCNT
-        str     r7, CLIDX
-	@ if length is 0, fail
+	@ if end of input fail
 	cmp	r1, #0
-	bgt	3f
+	bgt	5f
+4:
 	@ done, return best match (or none)
 	mov 	r0, r12
         pop     {r4-r12, lr}
         bx	lr
-3:
-        @ the thread started by CODE0 begins at the next char
-        mov     r10, r11
+5:
         @ get next character from input
         bl      GETCHA
-        mov     r3, pc
         @ compile time patch
-        b       CODE0
         b       CLIST
+
+START:
+	b	CODE0
         
 CNODE:
         @ r4 start of CLIST
@@ -118,25 +139,24 @@ CNODE:
         
 NNODE:
         @ r4 start of NLIST
+	@ r5 end of NLIST
         @ r6 NCNT
         @ r7 stored lr
         mov     r7, lr
         bl      ADRNLIST
         ldr     r6, NCNT
         lsl     r5, r6, #5
-
-        @ r5 end of CLIST
         add     r5, r4, r5
         @ check for duplicates
-        b       1f
-2:
+        b       2f
+1:
         ldr     r8, [r4, #16]
         cmp     r8, r7
         beq     3f
         add     r4, r4, #32
-1:
+2:
         cmp     r4, r5
-        blo     2b
+        blo     1b
         @ store target and start
         str     r7, [r5, #16]
         str     r10, [r5, #20]
