@@ -50,10 +50,10 @@ static u32 emit_bl(i32 here, i32 target)
 
 // Offsets are in bytes.
 enum {
-    XCHG_CODE0_OFF  = 36 * sizeof(u32),
-    CNODE_OFF       = 38 * sizeof(u32),
-    NNODE_OFF       = 54 * sizeof(u32),
-    MAXCCNT_OFF     = 70 * sizeof(u32),
+    START_CODE0_OFF = 53 * sizeof(u32),
+    CNODE_OFF       = 54 * sizeof(u32),
+    NNODE_OFF       = 78 * sizeof(u32),
+    MAXCCNT_OFF     = 95 * sizeof(u32),
     ALPHA_B_OFF     =  0 * sizeof(u32),
     ALPHA_BL_OFF    =  3 * sizeof(u32),
     ALPHA_CMP_OFF   =  1 * sizeof(u32),
@@ -68,97 +68,127 @@ enum {
 // 0xdeadbeef indicates compile time patch
 static const u32 runtime_tmpl[] = {
     // INIT:
-    0xe92d43f0,     // push  {r4-r9, lr}
+    0xe92d5ff0,     // push  {r4-r12, lr}
+    0xe3e0c000,     // mvn   r12, #0
+    0xe3a0b000,     // mov   r11, #0
     0xe3a04000,     // mov   r4, #0
-    0xe58f4110,     // str   r4, NCNT
-    0xea000008,     // b     XCHG
+    0xe58f416c,     // str   r4, NCNT
+    0xea000009,     // b     XCHG
 
     // ADRNLIST:
-    0xe59f8100,     // ldr   r8, MAXCCNT
-    0xe1a08208,     // lsl   r8, r8, #4
-    0xe28f9f41,     // adr   r9, CLIST
-    0xe0896008,     // add   r6, r9, r8
+    0xe59f815c,     // ldr   r8, MAXCCNT
+    0xe1a08288,     // lsl   r8, r8, #5
+    0xe28f9e16,     // adr   r9, CLIST
+    0xe0894008,     // add   r4, r9, r8
     0xe1a0f00e,     // mov   pc, lr
 
     // GETCHA:
     0xe5d02000,     // ldrb  r2, [r0]
     0xe2800001,     // add   r0, r0, #1
     0xe2411001,     // sub   r1, r1, #1
+    0xe28bb001,     // add   r11, r11, #1
     0xe1a0f00e,     // mov   pc, lr
 
     // XCHG:
-    0xe59f40e4,     // ldr   r4, NCNT
-    0xe1a05004,     // mov   r5, r4
-    0xebfffff3,     // bl    ADRNLIST
-    0xe28f70dc,     // adr   r7, CLIST
-    0xea000004,     // b     1f
-    // 2:
-    0xe596800c,     // ldr   r8, [r6, #12]
-    0xe587800c,     // str   r8, [r7, #12]
-    0xe2866010,     // add   r6, r6, #16
-    0xe2877010,     // add   r7, r7, #16
-    0xe2444001,     // add   r4, r4, #-1
+    0xebfffff4,     // bl    ADRNLIST
+    0xe59f6138,     // ldr   r6, NCNT
+    0xe1a05286,     // lsl   r5, r6, #5
+    0xe0845005,     // add   r5, r4, r5
+    0xe28f7e13,     // adr   r7, CLIST
+    0xe3560000,     // cmp   r6, #0
+    0x1a000008,     // bne   2f
+    0xe37c0001,     // cmn   r12, #1
+    0x1a000016,     // bne   4f
+    0xea000005,     // b     2f
     // 1:
-    0xe3540000,     // cmp   r4, #0
-    0xcafffff8,     // bgt   2b
-    0xe24f8038,     // adr   r8, XCHG
-    0xe587800c,     // str   r8, [r7, #12]
-    0xe58f40ac,     // str   r4, NCNT
-    0xe58f50a4,     // str   r5, CCNT
-    0xe3510000,     // cmp   r1, #0
-    0xca000002,     // bgt   3f
-    0xe3a00000,     // mov   r0, #0
-    0xe8bd43f0,     // pop   {r4-r9, lr}
-    0xe12fff1e,     // bx    lr
+    0xe5948010,     // ldr   r8, [r4, #16]
+    0xe5878010,     // str   r8, [r7, #16]
+    0xe5948014,     // ldr   r8, [r4, #20]
+    0xe5878014,     // str   r8, [r7, #20]
+    0xe2844020,     // add   r4, r4, #32
+    0xe2877020,     // add   r7, r7, #32
+    // 2:
+    0xe1540005,     // cmp   r4, r5
+    0x3afffff7,     // blo   1b
+    0xe37c0001,     // cmn   r12, #1
+    0x1a000004,     // bne   3f
+    0xe28f803c,     // adr   r8, START
+    0xe5878010,     // str   r8, [r7, #16]
+    0xe587b014,     // str   r11, [r7, #20]
+    0xe2866001,     // add   r6, r6, #1
+    0xe2877020,     // add   r7, r7, #32
     // 3:
-    0xebffffe5,     // bl    GETCHA
-    0xe1a0300f,     // mov   r3, pc
+    0xe24f806c,     // adr   r8, XCHG
+    0xe5878010,     // str   r8, [r7, #16]
+    0xe58f60cc,     // str   r6, CLIDX
+    0xe3a06000,     // mov   r6, #0
+    0xe58f60c8,     // str   r6, NCNT
+    0xe3510000,     // cmp   r1, #0
+    0xca000002,     // bgt   5f
+    // 4:
+    0xe1a0000c,     // mov   r0, r12
+    0xe8bd5ff0,     // pop   {r4-r12, lr}
+    0xe12fff1e,     // bx    lr
+    // 5:
+    0xebffffd6,     // bl    GETCHA
+    0xea00002c,     // b     CLIST
+
+    // START:
     0xdeadbeef,     // b     CODE0
-    0xea000022,     // b     CLIST
 
     // CNODE:
-    0xe28f4084,     // adr   r4, CLIST
-    0xe3a05000,     // mov   r5, #0
-    0xe59f6074,     // ldr   r6, CCNT
+    0xe28f40a8,     // adr   r4, CLIST
+    0xe59f609c,     // ldr   r6, CLIDX
+    0xe2865001,     // add   r5, r6, #1
+    0xe1a05285,     // lsl   r5, r5, #5
+    0xe0845005,     // add   r5, r4, r5
     // 1:
-    0xe594800c,     // ldr   r8, [r4, #12]
+    0xe5948010,     // ldr   r8, [r4, #16]
     0xe158000e,     // cmp   r8, lr
-    0x0a000007,     // beq   2f
-    0xe2844010,     // add   r4, r4, #16
-    0xe2855001,     // add   r5, r5, #1
-    0xe1550006,     // cmp   r5, r6
-    0x9afffff8,     // bls   1b
-    0xe5148004,     // ldr   r8, [r4, #-4]
-    0xe504e004,     // str   lr, [r4, #-4]
-    0xe584800c,     // str   r8, [r4, #12]
-    0xe58f5048,     // str   r5, CCNT
+    0x0a00000d,     // beq   3f
+    0xe2844020,     // add   r4, r4, #32
+    0xe1540005,     // cmp   r4, r5
+    0x3afffff9,     // blo   1b
     // 2:
+    0xe5158010,     // ldr   r8, [r5, #-16]
+    0xe5858010,     // str   r8, [r5, #16]
+    0xe515800c,     // ldr   r8, [r5, #-12]
+    0xe5858014,     // str   r8, [r5, #20]
+    0xe2455020,     // sub   r5, r5, #32
+    0xe1550003,     // cmp   r5, r3
+    0x8afffff8,     // bhi   2b
+    0xe583e010,     // str   lr, [r3, #16]
+    0xe583a014,     // str   r10, [r3, #20]
+    0xe2866001,     // add   r6, r6, #1
+    0xe58f604c,     // str   r6, CLIDX
+    // 3:
     0xe28ee004,     // add   lr, lr, #4
     0xe1a0f00e,     // mov   pc, lr
 
     // NNODE:
     0xe1a0700e,     // mov   r7, lr
-    0xe59f403c,     // ldr   r4, NCNT
-    0xe3a05000,     // mov   r5, #0
-    0xebffffc9,     // bl    ADRNLIST
-    0xea000004,     // b     1f
-    // 2:
-    0xe596800c,     // ldr   r8, [r6, #12]
+    0xebffffb5,     // bl    ADRNLIST
+    0xe59f603c,     // ldr   r6, NCNT
+    0xe1a05286,     // lsl   r5, r6, #5
+    0xe0845005,     // add   r5, r4, r5
+    0xea000003,     // b     2f
+    // 1:
+    0xe5948010,     // ldr   r8, [r4, #16]
     0xe1580007,     // cmp   r8, r7
     0x0a000006,     // beq   3f
-    0xe2866010,     // add   r6, r6, #16
-    0xe2855001,     // add   r5, r5, #1
-    // 1:
-    0xe1550004,     // cmp   r5, r4
-    0xbafffff8,     // blt   2b
-    0xe586700c,     // str   r7, [r6, #12]
-    0xe2844001,     // add   r4, r4, #1
-    0xe58f4008,     // str   r4, NCNT
+    0xe2844020,     // add   r4, r4, #32
+    // 2:
+    0xe1540005,     // cmp   r4, r5
+    0x3afffff9,     // blo   1b
+    0xe5857010,     // str   r7, [r5, #16]
+    0xe585a014,     // str   r10, [r5, #20]
+    0xe2866001,     // add   r6, r6, #1
+    0xe58f6008,     // str   r6, NCNT
     // 3:
     0xe1a0f003,     // mov   pc, r3
     // MAXCCNT:
     0xdeadbeef,     // .word
-    // CCNT:
+    // CLIDX:
     0x00000000,     // .word
     // NCNT:
     0x00000000      // .word
@@ -167,9 +197,13 @@ static const u32 runtime_tmpl[] = {
 // CLIST and NLIST entries
 static const u32 list_tmpl[] = {
     0xe1a0300f,     // mov   r3, pc
-    0xe2833008,     // add   r3, r3, #8
+    0xe2833018,     // add   r3, r3, #24
+    0xe59fa004,     // ldr   r10, [pc, #4]
     0xe51ff004,     // ldr   pc, [pc, #-4]
-    0xdeadbeef      // .word
+    0x00000000,     // .word target, run time patch
+    0x00000000,     // .word start, run time patch
+    0x00000000,     // .word pad
+    0x00000000      // .word pad
 };
 
 static const u32 alpha_tmpl[] = {
@@ -192,9 +226,9 @@ static const u32 or_tmpl[] = {
 };
 
 static const u32 end_tmpl[] = {
-    0xe3a00001,     // mov   r0, #1
-    0xe8bd43f0,     // pop   {r4-r9, lr}
-    0xe12fff1e      // bx    lr
+    0xe15a000c,     // cmp   r10, r12
+    0x31a0c00a,     // movlo r12, r10
+    0xe1a0f003      // mov   pc, r3
 };
 
 struct cre_sizes {
@@ -231,6 +265,7 @@ static b32 get_sizes(struct s8 re, struct cre_sizes *s)
         }
         }
     }
+    s->clist_len++;  // Account for START
     s->clist_len++;  // Account for XCHG terminator
     s->code_sz += sizeof(end_tmpl);
     s->total_sz += s->code_sz;
@@ -240,7 +275,7 @@ static b32 get_sizes(struct s8 re, struct cre_sizes *s)
     return s->total_sz < (1 << 25);
 }
 
-static b32 (*arch_compile(struct arena scratch, struct s8 re, size *sz))(const u8 *, size)
+static i32 (*arch_compile(struct arena scratch, struct s8 re, size *sz))(const u8 *, size)
 {
     struct cre_sizes s;
     if (!get_sizes(re, &s)) {
@@ -268,8 +303,8 @@ static b32 (*arch_compile(struct arena scratch, struct s8 re, size *sz))(const u
     base += s.nlist_len * sizeof(list_tmpl);
 
     // TODO: remove cast on ARM here and below
-    *((u32 *) (cre + XCHG_CODE0_OFF)) = emit_b(XCHG_CODE0_OFF,
-                                               (i32) (s.total_sz - s.code_sz));
+    *((u32 *) (cre + START_CODE0_OFF)) = emit_b(START_CODE0_OFF,
+                                                (i32) (s.total_sz - s.code_sz));
     *((u32 *) (cre + MAXCCNT_OFF)) = (u32) s.clist_len;
 
     struct stack stk;
@@ -348,5 +383,5 @@ static b32 (*arch_compile(struct arena scratch, struct s8 re, size *sz))(const u
     // Make the generated code visible to instruction fetch.
     __builtin___clear_cache((char *) cre, (char *) cre + s.total_sz);
     // Mapping ensures bit 0 is 0 so ARM state is entered when executing it.
-    return (b32 (*)(const u8 *, size)) cre;
+    return (i32 (*)(const u8 *, size)) cre;
 }

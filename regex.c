@@ -71,8 +71,9 @@ static _Noreturn void plt_exit(i32 rc);
 
 // The matcher takes (str, length). str must be NULL-terminated and length
 // must include the terminator: a match ending on the last character is only
-// reported on the NULL-terminator's iteration. 
-static b32 (*arch_compile(struct arena, struct s8, size *sz))(const u8 *, size);
+// reported on the NULL-terminator's iteration. It returns the index of the
+// leftmost match start, or -1 if there is no match.
+static i32 (*arch_compile(struct arena, struct s8, size *sz))(const u8 *, size);
 
 static struct buf in = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 0, 0, 0 };
 static struct buf out = { (u8[1 << 8]) { 0 }, 0, 1 << 8, 0, 1, 0, 0 };
@@ -282,7 +283,7 @@ static i32 re_(i32 argc, u8 **argv, struct arena *perm)
     }
 
     size match_sz;
-    b32 (*match)(const u8 *, size) = arch_compile(*perm, pre, &match_sz);
+    i32 (*match)(const u8 *, size) = arch_compile(*perm, pre, &match_sz);
     if (!match) {
         append_cstr(&err, "error: compile\n");
         return 1;
@@ -299,7 +300,7 @@ static i32 re_(i32 argc, u8 **argv, struct arena *perm)
         }
 
         struct s8 cline = s8cat(&scratch, (struct s8) {line, cnt}, s8nul);
-        if (match(cline.data, cline.len)) {
+        if (match(cline.data, cline.len) >= 0) {
             append(&out, line, cnt);
             if (line[cnt - 1] != '\n') {
                 append_cstr(&out, "\n");

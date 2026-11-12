@@ -1,6 +1,7 @@
         @gcc -Werror -std=gnu99 -fno-builtin -Wall -Wextra -nostdlib -mgeneral-regs-only -fno-diagnostics-color -fpie -O2 -o sample sample.s
         @ INIT(str, length)
         @ str must be NULL-terminated, length must include NULL-terminator
+        @ return index of left most match or -1 if no match found
         @ r0 - str
         @ r1 - length
         @ r2 - current char
@@ -44,18 +45,13 @@ XCHG:
         add     r5, r4, r5
 	adr     r7, CLIST
 	@ no more NNODES, done
-	cmp	r11, #0
-	beq	2f
-	cmp	r6, #0
-	beq	4f
+        cmp	r6, #0
+        bne     2f
+	cmn	r12, #1
+        bne     4f
 	@ copy NNODES to CLIST
 	b	2f
 1:
-        ldr     r8, [r4, #16]
-        cmp     r8, r7
-        beq     3f
-        add     r4, r4, #32
-
 	ldr     r8, [r4, #16]
         str     r8, [r7, #16]
         ldr     r8, [r4, #20]
@@ -67,8 +63,8 @@ XCHG:
         blo     1b
 	@ if no match found, copy START to CLIST
 	cmn	r12, #1
-	bne	3
-	adr     r8, DONE
+	bne	3f
+	adr     r8, START
         str     r8, [r7, #16]
 	@ current input position
 	str     r11, [r7, #20]
@@ -102,11 +98,11 @@ START:
 CNODE:
         @ r4 start of CLIST
         @ r6 CLIDX
+        @ r5 one beyond end of CLIST
         adr     r4, CLIST
         ldr     r6, CLIDX
         add     r5, r6, #1
         lsl     r5, r5, #5
-        @ r5 one beyond end of CLIST
         add     r5, r4, r5
 
         @ check for duplicates

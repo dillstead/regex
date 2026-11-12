@@ -122,7 +122,7 @@ static void fuzz_one(struct arena a, struct guarded g, u8 *buf, size len)
         && to_postfix(&a, add_concat(&a, re), &pre)
         && check_closures(a, pre)) {
         size match_sz;
-        b32 (*match)(const u8 *, size) = arch_compile(a, pre, &match_sz);
+        i32 (*match)(const u8 *, size) = arch_compile(a, pre, &match_sz);
         if (match) {
             // Lines as get_line() returns them: '\n' included, the last one
             // may lack it.
